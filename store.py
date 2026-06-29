@@ -130,6 +130,40 @@ def recent(n: int = 20) -> list[dict]:
         return runs
 
 
+def calibration(model: str | None = None) -> dict:
+    """Per-option observed stats from real runs — used to calibrate the Fit Advisor."""
+    with _conn() as c:
+        c.row_factory = sqlite3.Row
+        q = ("SELECT option,success,acc_score,cost_usd,latency_s,tokens_in,tokens_out,executed "
+             "FROM runs WHERE error IS NULL")
+        args = []
+        if model:
+            q += " AND model=?"; args.append(model)
+        rows = [dict(r) for r in c.execute(q, args).fetchall()]
+    groups: dict = {}
+    for r in rows:
+        k = (r["option"] or "?")[0].lower()
+        groups.setdefault(k, []).append(r)
+    out = {}
+    for k, xs in groups.items():
+        accs = [x["acc_score"] for x in xs if x["acc_score"] is not None]
+        sx = [x for x in xs if x["success"] is not None]
+        def avg(key, _xs=xs):
+            vals = [x[key] for x in _xs if x[key] is not None]
+            return (sum(vals) / len(vals)) if vals else None
+        out[k] = {
+            "runs": len(xs),
+            "acc": round(sum(accs) / len(accs), 1) if accs else None,
+            "success_rate": round(100 * sum(1 for x in sx if x["success"]) / len(sx)) if sx else None,
+            "cost": round(avg("cost_usd"), 4) if avg("cost_usd") is not None else None,
+            "latency": round(avg("latency_s") or 0, 1),
+            "tok_in": round(avg("tokens_in") or 0), "tok_out": round(avg("tokens_out") or 0),
+            "api": round(avg("executed") or 0, 1),
+        }
+    out["_meta"] = {"total": len(rows), "model": model}
+    return out
+
+
 if __name__ == "__main__":
     for r in recent(15):
         print(f"#{r['id']} [{r['ts']}] {r['source']}/{r['option']} {r['task_id'] or ''} "

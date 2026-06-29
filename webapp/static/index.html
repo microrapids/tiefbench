@@ -44,8 +44,12 @@
              margin:4px 2px 12px}
 
   /* option cards */
-  .opt{display:flex; gap:11px; align-items:flex-start; padding:12px; border:1px solid var(--line);
+  .opt{position:relative; display:flex; gap:11px; align-items:flex-start; padding:12px; border:1px solid var(--line);
        border-radius:12px; background:var(--panel); cursor:pointer; margin-bottom:10px; transition:.15s}
+  .fitdot{position:absolute; top:11px; right:11px; width:9px; height:9px; border-radius:50%; box-shadow:0 0 6px currentColor}
+  .fitdot.green{background:var(--ok); color:var(--ok)}
+  .fitdot.amber{background:var(--warn); color:var(--warn)}
+  .fitdot.red{background:var(--bad); color:var(--bad)}
   .opt:hover{border-color:#33405e; transform:translateY(-1px)}
   .opt.active{border-color:var(--accent); background:linear-gradient(180deg,#1a2236,#141a28);
        box-shadow:0 0 0 1px var(--accent) inset, var(--shadow)}
@@ -121,6 +125,16 @@
   .qmsg{color:var(--mut); font-size:12px; font-style:italic; margin:2px 0 8px}
   .nexthint{font-size:12px; color:var(--mut); white-space:nowrap}
   .nexthint b{color:var(--accent)}
+  .fitnudge{max-width:900px;margin:0 auto 10px;display:flex;align-items:center;gap:10px;
+    font-size:12.5px;border-radius:10px;padding:8px 12px}
+  .fitnudge.amber{background:#2a230e;border:1px solid #5a4a1e;color:var(--warn)}
+  .fitnudge.red{background:#2a1414;border:1px solid #5a2424;color:var(--bad)}
+  .fitnudge.green{background:#0e1f17;border:1px solid #1e4a38;color:var(--ok)}
+  .fitnudge b{color:var(--txt)}
+  .fitnudge .switch{margin-left:auto;cursor:pointer;border:1px solid currentColor;border-radius:8px;
+    padding:3px 10px;white-space:nowrap;font-weight:600}
+  .fitnudge .switch:hover{background:rgba(255,255,255,.06)}
+  .fitnudge a.more{color:inherit;text-decoration:underline;opacity:.85}
   .focusbanner{font-size:11px; color:var(--warn); margin-bottom:8px}
   .diagram{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:10px;
            overflow-x:auto; display:flex; justify-content:center}
@@ -214,6 +228,8 @@
   <span class="badge" id="envBadge">…</span>
   <label class="toggle"><input type="checkbox" id="grade"> grade accuracy</label>
   <label class="toggle"><input type="checkbox" id="raw"> show raw</label>
+  <a class="btn ghost" href="/advisor" style="text-decoration:none">🧭 Fit Advisor</a>
+  <a class="btn ghost" href="/tune" style="text-decoration:none">🔧 Tune MCP</a>
   <button class="btn ghost" id="historyBtn">🕘 History</button>
   <button class="btn ghost" id="pinBtn">📌 Pinned (0)</button>
   <button class="btn ghost" id="compareBtn">⚖️ Compare all 5</button>
@@ -230,6 +246,7 @@
   <div class="col center">
     <div class="chat" id="chat"></div>
     <div class="composer">
+      <div id="fitNudge" class="fitnudge" style="display:none"></div>
       <div class="crow">
         <input id="input" placeholder="Ask about the portfolio in plain English…" autofocus>
         <span class="nexthint" id="nextopt"></span>
@@ -292,15 +309,22 @@ function el(html){const d=document.createElement('div'); d.innerHTML=html.trim()
 function scroll(){chat.scrollTop=chat.scrollHeight;}
 const verbClass=v=>v==='GET'?'GET':(v==='BLOCKED'?'BLK':'POST');
 
+function fitDot(key){
+  if(!FIT) return '';
+  const o=(FIT.options||[]).find(x=>x.key===key); if(!o) return '';
+  const tip={green:'Good fit for this pack',amber:'Works, with caveats',red:'May underperform'}[o.badge];
+  return `<span class="fitdot ${o.badge}" title="${tip}"></span>`;
+}
 function renderOptions(){
   const box=$('#opts'); box.innerHTML='';
   CFG.options.forEach(o=>{
     const card=el(`<div class="opt ${o.key===current?'active':''}" data-k="${o.key}">
+      ${fitDot(o.key)}
       <div class="ic">${o.icon||'•'}</div>
       <div><div class="k">OPTION ${o.key.toUpperCase()}</div>
       <div class="nm">${o.label}</div><div class="tg">${o.tagline||''}</div></div></div>`);
     card.onclick=()=>{
-      current=o.key; renderOptions(); updateNextHint();
+      current=o.key; renderOptions(); updateNextHint(); updateNudge();
       if(!activeRun) renderRight();          // only refresh preview when nothing is being monitored
       narrate(o);
     };
@@ -313,6 +337,32 @@ function optMeta(k){return CFG.options.find(o=>o.key===k)||meta();}
 function updateNextHint(){
   const o=meta(); const n=$('#nextopt');
   if(n) n.innerHTML = `next ▶ <b>${o.icon} ${o.label}</b>`;
+}
+
+// ---- inline fit nudge (warns before sending if the chosen option fits poorly) ----
+let FIT=null;
+async function loadFit(){
+  try{ FIT=await (await fetch('/api/fit',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json(); }
+  catch(e){ FIT=null; }
+  renderOptions(); updateNudge();    // paint fit dots once data arrives
+}
+function switchToRecommended(){
+  if(!FIT) return; current=FIT.recommended; renderOptions(); updateNextHint(); updateNudge();
+  if(!activeRun) renderRight();
+}
+function updateNudge(){
+  const box=$('#fitNudge'); if(!box||!FIT) return;
+  const o=(FIT.options||[]).find(x=>x.key===current); if(!o){ box.style.display='none'; return; }
+  box.className='fitnudge '+o.badge;
+  if(o.badge==='green'){
+    box.innerHTML=`✓ <b>${o.label}</b> is a good fit for this pack. <a class="more" href="/advisor">see all options →</a>`;
+    box.style.display='flex'; return;
+  }
+  const recBtn = (FIT.recommended && FIT.recommended!==current)
+    ? `<span class="switch" onclick="switchToRecommended()">Switch to ${FIT.recommended_label} →</span>` : '';
+  box.innerHTML=`⚠ <span><b>${o.label}</b> ${o.badge==='red'?'may underperform':'works, with caveats'} for this pack — ${o.reasons[0]}
+    <a class="more" href="/advisor">details</a></span>${recBtn}`;
+  box.style.display='flex';
 }
 
 // The right panel = MONITOR for the focused run. If `run` is given it shows that
@@ -821,6 +871,7 @@ $('#pinBtn').onclick=pinnedCompare;
     </div></div>`));
   renderRight();
   narrate(meta());
+  loadFit();
 })();
 </script>
 </body>

@@ -160,6 +160,69 @@ def _payload(req: ChatReq, res, mod, key) -> dict:
     }
 
 
+class FitReq(BaseModel):
+    pack: dict | None = None        # a TiefWise pack/manifest; null = built-in pack
+    simulate_n: int | None = None   # what-if tool count
+
+
+@app.post("/api/fit")
+def api_fit(req: FitReq):
+    import fit
+    import tools as T
+    norm = fit.normalize(req.pack) if req.pack else fit.from_builtin(T.TOOLS, T.WRITE_TOOLS)
+    if not norm:
+        return {"error": "no tools found in pack"}
+    # calibrate from real runs only for the built-in pack (that's what was measured)
+    calib = None
+    if not req.pack:
+        try:
+            import store
+            calib = store.calibration(core.MODEL)
+        except Exception:
+            calib = None
+    return fit.analyze(norm, simulate_n=req.simulate_n, calib=calib)
+
+
+@app.get("/advisor")
+def advisor_page():
+    return FileResponse(os.path.join(STATIC, "advisor.html"))
+
+
+class TuneReq(BaseModel):
+    pack: dict | None = None
+    scenarios: list = []          # list of strings or {text, expected}
+    edits: dict | None = None     # {tool_name: new_description} for retest
+
+
+def _tune_tools(req):
+    import fit
+    import tools as T
+    return fit.normalize(req.pack) if req.pack else fit.from_builtin(T.TOOLS, T.WRITE_TOOLS)
+
+
+@app.post("/api/tune/analyze")
+def tune_analyze(req: TuneReq):
+    import tune
+    norm = _tune_tools(req)
+    if not norm:
+        return {"error": "no tools in pack"}
+    if not req.scenarios:
+        return {"error": "no scenarios provided"}
+    return tune.analyze(norm, req.scenarios)
+
+
+@app.post("/api/tune/retest")
+def tune_retest(req: TuneReq):
+    import tune
+    norm = _tune_tools(req)
+    return tune.retest(norm, req.edits or {}, req.scenarios)
+
+
+@app.get("/tune")
+def tune_page():
+    return FileResponse(os.path.join(STATIC, "tune.html"))
+
+
 @app.get("/api/history")
 def history(n: int = 25):
     try:

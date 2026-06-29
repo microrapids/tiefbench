@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TiefBench · Tune my MCP</title>
+<style>
+  :root{--bg:#0b0e14;--bg2:#0f131c;--panel:#141925;--line:#242c3d;--txt:#e8ebf2;--mut:#8a93a8;
+        --accent:#7aa2ff;--accent2:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;--shadow:0 8px 30px rgba(0,0,0,.35)}
+  *{box-sizing:border-box} body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#16203a 0%,var(--bg) 55%);color:var(--txt);min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);
+    background:rgba(10,13,20,.6);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 12px var(--accent)}
+  .brand small{color:var(--mut);font-weight:500}
+  header .spacer{flex:1}
+  a.lnk,.srcbtn{font-size:13px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 13px;text-decoration:none;cursor:pointer}
+  a.lnk:hover,.srcbtn:hover{border-color:var(--accent)} .srcbtn.active{border-color:var(--accent);color:var(--accent)}
+  main{max-width:1000px;margin:0 auto;padding:22px}
+  h3.sec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:22px 2px 10px}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0f1c;border:none;font-weight:700;padding:10px 16px;border-radius:10px;cursor:pointer}
+  .btn.ghost{background:var(--panel);color:var(--txt);border:1px solid var(--line);font-weight:600}
+  .btn:disabled{opacity:.5;cursor:default}
+  textarea{width:100%;min-height:96px;background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:12px;font:inherit;resize:vertical}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .chip{font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:6px 12px;color:var(--mut)}
+  .chip b{color:var(--txt)} .chip.bad{border-color:var(--red);color:var(--red)} .chip.ok{border-color:var(--green);color:var(--green)}
+  .chip.up{border-color:var(--green);color:var(--green)} .chip.down{border-color:var(--red);color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+  th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .iss{font-size:10px;font-weight:700;border-radius:6px;padding:2px 7px;margin-right:4px}
+  .iss.ambiguous{background:#2a230e;color:var(--amber)} .iss.low_confidence{background:#2a230e;color:var(--amber)}
+  .iss.no_tool{background:#2a1414;color:var(--red)} .iss.wrong_tool{background:#2a1414;color:var(--red)}
+  .ok-pill{font-size:10px;color:var(--green)}
+  .sug{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .sug h4{margin:0 0 6px;display:flex;align-items:center;gap:8px}
+  .sug .old{color:var(--mut);font-size:12px;background:#0d1119;border:1px solid var(--line);border-radius:8px;padding:6px 9px;margin-bottom:8px;text-decoration:line-through;text-decoration-color:#5a2424}
+  .sug .rat{color:var(--accent2);font-size:12px;margin-top:6px}
+  .sug label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-top:8px}
+  .empty{color:var(--mut);text-align:center;padding:20px}
+  .change{font-size:11px} .change .arrow{color:var(--mut)}
+  input[type=file]{display:none}
+  .ba{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px}
+  .ba .col{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .ba .col h5{margin:0 0 8px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> TiefBench <small>· Tune my MCP</small></div>
+  <div class="spacer"></div>
+  <button class="srcbtn active" id="srcBuiltin">TiefStocks pack</button>
+  <label class="srcbtn" for="packFile">Upload MCP / TiefWise pack</label>
+  <input type="file" id="packFile" accept=".json">
+  <a class="lnk" href="/advisor">🧭 Advisor</a>
+  <a class="lnk" href="/">← Bake-off</a>
+</header>
+
+<main>
+  <h3 class="sec">1 · Real scenarios (what your users will ask) — one per line</h3>
+  <textarea id="scen" placeholder="e.g.
+Show me what I own
+Is AMD a buy right now?
+What changed in my portfolio today?"></textarea>
+  <div style="margin-top:10px"><button class="btn ghost" id="sampleBtn">Use sample scenarios</button>
+    <button class="btn" id="analyzeBtn">Analyze selection ▸</button></div>
+
+  <div id="before"></div>
+  <div id="suggestions"></div>
+  <div id="after"></div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+let pack=null, lastTools=[], lastScen=[];
+
+const SAMPLES=["Show me what I own","Is AMD a buy right now?","What changed in my portfolio today?","Give me the bear case on AMD"];
+$('#sampleBtn').onclick=()=>{ $('#scen').value=SAMPLES.join("\n"); };
+$('#srcBuiltin').onclick=()=>{ pack=null; $('#srcBuiltin').classList.add('active'); };
+$('#packFile').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f)return;
+  try{ pack=JSON.parse(await f.text()); $('#srcBuiltin').classList.remove('active'); }catch(err){ alert('Bad JSON: '+err); } });
+
+function scenarios(){ return $('#scen').value.split("\n").map(s=>s.trim()).filter(Boolean).map(t=>({text:t})); }
+function issuesHtml(iss){ return iss.length? iss.map(i=>`<span class="iss ${i}">${i.replace('_',' ')}</span>`).join('') : '<span class="ok-pill">✓ clean</span>'; }
+function sumChips(s){ return `
+  <span class="chip"><b>${s.scenarios}</b> scenarios</span>
+  <span class="chip ${s.ambiguous?'bad':''}"><b>${s.ambiguous}</b> ambiguous</span>
+  <span class="chip ${s.low_confidence?'bad':''}"><b>${s.low_confidence}</b> low-confidence</span>
+  <span class="chip ${s.no_tool?'bad':''}"><b>${s.no_tool}</b> no-tool</span>
+  <span class="chip ${s.clean===s.scenarios?'ok':''}"><b>${s.clean}</b> clean</span>
+  <span class="chip"><b>${s.avg_confidence}</b> avg confidence</span>`; }
+function resTable(results){
+  return `<table><thead><tr><th>Scenario</th><th>Chosen tool</th><th>Conf</th><th>Issues</th><th>Why</th></tr></thead><tbody>`+
+   results.map(r=>`<tr><td>${r.scenario}</td><td><b>${r.chosen||'—'}</b></td><td>${r.confidence}</td>
+     <td>${issuesHtml(r.issues)}</td><td style="color:var(--mut)">${r.why||''}</td></tr>`).join('')+`</tbody></table>`;
+}
+
+async function analyze(){
+  const scen=scenarios(); if(!scen.length){ alert('Add at least one scenario'); return; }
+  lastScen=scen;
+  $('#analyzeBtn').disabled=true; $('#before').innerHTML='<div class="empty">Probing tool selection…</div>';
+  $('#suggestions').innerHTML=''; $('#after').innerHTML='';
+  let d;
+  try{ d=await (await fetch('/api/tune/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack,scenarios:scen})})).json(); }
+  catch(e){ $('#before').innerHTML='<div class="empty">Error: '+e+'</div>'; $('#analyzeBtn').disabled=false; return; }
+  if(d.error){ $('#before').innerHTML='<div class="empty">'+d.error+'</div>'; $('#analyzeBtn').disabled=false; return; }
+  lastTools=d.tools||[];
+  window._beforeSummary=d.summary;
+  $('#before').innerHTML=`<h3 class="sec">2 · How your descriptions perform now</h3><div class="chips">${sumChips(d.summary)}</div>${resTable(d.results)}`;
+  renderSuggestions(d.suggestions||[]);
+  $('#analyzeBtn').disabled=false;
+}
+
+function renderSuggestions(sugs){
+  if(!sugs.length){ $('#suggestions').innerHTML='<h3 class="sec">3 · Suggested fixes</h3><div class="empty">No description problems detected for these scenarios. 🎉</div>'; return; }
+  $('#suggestions').innerHTML=`<h3 class="sec">3 · AI-drafted description fixes — review &amp; approve</h3>`+
+   sugs.map((s,i)=>`<div class="sug">
+      <h4>🔧 ${s.name}</h4>
+      <div class="old">${(lastTools.find(t=>t.name===s.name)||{}).description||'(current description)'}</div>
+      <textarea data-name="${s.name}" id="edit${i}">${s.new_description}</textarea>
+      <div class="rat">why: ${s.rationale||''}</div>
+      <label><input type="checkbox" class="approve" data-name="${s.name}" data-edit="edit${i}" checked> Approve this change</label>
+    </div>`).join('')+
+   `<div style="margin-top:8px"><button class="btn" id="retestBtn">Re-test with approved fixes ▸</button>
+     <button class="btn ghost" id="exportBtn">⬇ Export tuned config</button></div>`;
+  $('#retestBtn').onclick=retest; $('#exportBtn').onclick=exportConfig;
+}
+
+function approvedEdits(){
+  const edits={};
+  document.querySelectorAll('.approve').forEach(cb=>{ if(cb.checked){ const ta=document.getElementById(cb.dataset.edit); edits[cb.dataset.name]=ta.value; } });
+  return edits;
+}
+
+async function retest(){
+  const edits=approvedEdits();
+  if(!Object.keys(edits).length){ alert('Approve at least one fix'); return; }
+  $('#retestBtn').disabled=true; $('#after').innerHTML='<div class="empty">Re-testing with approved descriptions…</div>';
+  const before=window._beforeSummary;
+  let d;
+  try{ d=await (await fetch('/api/tune/retest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack,edits,scenarios:lastScen})})).json(); }
+  catch(e){ $('#after').innerHTML='<div class="empty">Error: '+e+'</div>'; return; }
+  const s=d.summary, b=before||{};
+  const delta=(k,better='down')=>{ if(b[k]==null) return ''; const d2=s[k]-b[k];
+    if(d2===0) return ''; const good=(better==='down'?d2<0:d2>0); return ` <span class="chip ${good?'up':'down'}">${d2>0?'+':''}${d2}</span>`; };
+  $('#after').innerHTML=`<h3 class="sec">4 · After — before/after proof</h3>
+    <div class="ba">
+     <div class="col"><h5>Before</h5><div class="chips">${sumChips(b)}</div></div>
+     <div class="col"><h5>After</h5><div class="chips">${sumChips(s)}</div></div>
+    </div>
+    <div class="chips" style="margin-top:10px">
+      <span class="chip">ambiguous ${b.ambiguous??'?'} → <b>${s.ambiguous}</b>${delta('ambiguous')}</span>
+      <span class="chip">low-conf ${b.low_confidence??'?'} → <b>${s.low_confidence}</b>${delta('low_confidence')}</span>
+      <span class="chip">avg confidence ${b.avg_confidence??'?'} → <b>${s.avg_confidence}</b>${delta('avg_confidence','up')}</span>
+    </div>
+    ${resTable(d.results)}`;
+  $('#retestBtn').disabled=false;
+}
+
+function exportConfig(){
+  const edits=approvedEdits();
+  const tools=lastTools.map(t=>({name:t.name, description: edits[t.name]||t.description}));
+  const out=pack ? applyToPack(pack,edits) : {tools};
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tuned-mcp-config.json'; a.click();
+}
+function applyToPack(p,edits){ const c=JSON.parse(JSON.stringify(p)); (c.tools||[]).forEach(t=>{ if(edits[t.name]) t.description=edits[t.name]; }); return c; }
+
+$('#analyzeBtn').onclick=analyze;
+</script>
+</body>
+</html>
