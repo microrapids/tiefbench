@@ -1,19 +1,63 @@
-# TiefBench — all 5 options, one scorecard
+# TiefBench
 
-End-to-end, demo-able implementation of every API-to-agent option from
-[`../api-to-agent-poc-stories.md`](../api-to-agent-poc-stories.md), all running
-the **same story ladder** against the **live TiefStocks API** and emitting **one
-comparable scorecard** (accuracy / API calls / tokens / cost / latency / safety).
+**Benchmark and observe how AI agents reach your APIs.** TiefBench runs the same
+request through five agent strategies — direct function calling, MCP, OpenAPI/
+mrapids collections, planner orchestration, and dynamic Python — against a live
+API, and shows you which approach is most accurate, cheapest, and safest. It also
+**advises** which strategy fits your tool pack and **tunes your MCP tool
+descriptions** from real scenarios.
 
 ```
 User NL prompt
-   ↓  (LangChain-style loop, implemented directly on the Anthropic SDK)
+   ↓  agent layer (tool-use loop on the Anthropic SDK)
 Option A/B/C/D/E  ← the execution surface being compared
    ↓
 Policy / approval layer  ← deterministic, OUTSIDE the model (writes are gated)
    ↓
-TiefStocks API @ localhost:8001
+Your API (demo: TiefStocks @ localhost:8001)
 ```
+
+## Quickstart
+
+**Prerequisites:** Python 3.11+, a **funded** `ANTHROPIC_API_KEY`. Optional:
+[`mrapids`](https://microrapid.io/mrapids/) on PATH (for Option D) and a target
+API running locally (the demo expects TiefStocks at `http://localhost:8001`).
+
+```bash
+git clone https://github.com/microrapids/tiefbench.git
+cd tiefbench
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+export ANTHROPIC_API_KEY=sk-ant-...          # must have credit balance
+
+# Web app — three screens:
+.venv/bin/python -m uvicorn webapp.server:app --port 8800
+#   http://127.0.0.1:8800          Bake-off chat (compare all 5, monitor each query)
+#   http://127.0.0.1:8800/advisor  Fit Advisor (which option suits your pack)
+#   http://127.0.0.1:8800/tune     Tune my MCP (improve tool descriptions from scenarios)
+```
+
+**CLI bake-off** (scored scorecard + per-option aggregates, persisted to a cache DB):
+
+```bash
+.venv/bin/python run_demo.py --judge              # all options × tasks, accuracy-graded
+.venv/bin/python run_demo.py --runs 3 --judge     # N runs for averages + variance
+.venv/bin/python run_demo.py --history 10         # recent persisted runs (intent + reasons)
+.venv/bin/python qa_smoke.py                       # regression suite (server must be up)
+```
+
+**Config (env vars):** `TIEFBENCH_MODEL` (default `claude-sonnet-4-6`),
+`TIEFSTOCKS_URL` (default `http://127.0.0.1:8001`),
+`TIEFBENCH_JUDGE_MODEL` / `TIEFBENCH_INTENT_MODEL` (default Haiku).
+
+> The **Fit Advisor** and **Tune my MCP** screens work without the live API or
+> `mrapids` (Tune uses a selection probe; the Advisor is static + calibrated from
+> past runs). The **chat bake-off** needs the API key, and the live API for
+> options that actually call it.
+
+## Design docs
+
+The full API-to-agent comparison write-up is in
+[`docs/poc-stories.md`](./docs/poc-stories.md).
 
 ## Architecture docs
 
