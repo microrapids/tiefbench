@@ -1,0 +1,6 @@
+.venv/
+results/
+.env
+__pycache__/
+*.pyc
+.mrapids/

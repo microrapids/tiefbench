@@ -1,0 +1,3 @@
+anthropic>=0.112
+requests>=2.32
+mcp[cli]>=1.28

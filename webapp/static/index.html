@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TiefBench — API-to-Agent POC</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14; --bg2:#0f131c; --panel:#141925; --panel2:#1a2030; --line:#242c3d;
+    --txt:#e8ebf2; --mut:#8a93a8; --accent:#7aa2ff; --accent2:#a78bfa;
+    --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --get:#34d399; --write:#fbbf24;
+    --shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+       background:radial-gradient(1200px 600px at 80% -10%,#16203a 0%,var(--bg) 55%);
+       color:var(--txt); display:grid; grid-template-rows:auto 1fr; height:100vh; overflow:hidden}
+
+  /* top bar */
+  header{display:flex; align-items:center; gap:16px; padding:12px 20px;
+         border-bottom:1px solid var(--line); background:rgba(10,13,20,.6); backdrop-filter:blur(8px)}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px}
+  .brand .dot{width:10px;height:10px;border-radius:50%;
+       background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 12px var(--accent)}
+  .brand small{color:var(--mut); font-weight:500}
+  header .spacer{flex:1}
+  .badge{font-size:12px; color:var(--mut); background:var(--panel); border:1px solid var(--line);
+         padding:5px 10px; border-radius:20px}
+  .toggle{display:flex; align-items:center; gap:7px; color:var(--mut); font-size:12px; cursor:pointer}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a0f1c; border:none;
+       font-weight:700; padding:9px 14px; border-radius:10px; cursor:pointer; font-size:13px}
+  .btn.ghost{background:var(--panel); color:var(--txt); border:1px solid var(--line); font-weight:600}
+  .btn:disabled{opacity:.5; cursor:default}
+
+  /* layout */
+  .app{display:grid; grid-template-columns:300px 1fr 400px; height:100%; overflow:hidden}
+  .col{overflow-y:auto; padding:16px}
+  .col.left{border-right:1px solid var(--line); background:var(--bg2)}
+  .col.right{border-left:1px solid var(--line); background:var(--bg2)}
+  .col.center{display:flex; flex-direction:column; padding:0}
+  h3.section{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--mut);
+             margin:4px 2px 12px}
+
+  /* option cards */
+  .opt{display:flex; gap:11px; align-items:flex-start; padding:12px; border:1px solid var(--line);
+       border-radius:12px; background:var(--panel); cursor:pointer; margin-bottom:10px; transition:.15s}
+  .opt:hover{border-color:#33405e; transform:translateY(-1px)}
+  .opt.active{border-color:var(--accent); background:linear-gradient(180deg,#1a2236,#141a28);
+       box-shadow:0 0 0 1px var(--accent) inset, var(--shadow)}
+  .opt .ic{font-size:20px; line-height:1.2}
+  .opt .k{font-size:10px; color:var(--accent); font-weight:700}
+  .opt .nm{font-weight:700; font-size:14px}
+  .opt .tg{color:var(--mut); font-size:12px; margin-top:2px}
+
+  /* chat */
+  .chat{flex:1; overflow-y:auto; padding:22px; display:flex; flex-direction:column; gap:18px}
+  .msg{max-width:760px; width:fit-content}
+  .msg.user{align-self:flex-end}
+  .who{font-size:11px; color:var(--mut); margin:0 4px 5px}
+  .bubble{padding:13px 16px; border-radius:14px; border:1px solid var(--line); background:var(--panel);
+          white-space:pre-wrap; box-shadow:var(--shadow)}
+  .msg.user .bubble{background:linear-gradient(135deg,#1e2b50,#1a2440); border-color:#2e3e66}
+  .bubble table{border-collapse:collapse; margin-top:6px; font-size:13px}
+  .bubble td,.bubble th{border:1px solid var(--line); padding:4px 8px}
+  .metrics{display:flex; gap:7px; flex-wrap:wrap; margin-top:10px}
+  .chip{font-size:11px; background:var(--bg); border:1px solid var(--line); border-radius:20px;
+        padding:4px 10px; color:var(--mut)}
+  .chip b{color:var(--txt)}
+  .chip.ok{border-color:var(--ok); color:var(--ok)} .chip.warn{border-color:var(--warn); color:var(--warn)}
+  .chip.bad{border-color:var(--bad); color:var(--bad)} .chip.acc{border-color:var(--accent); color:var(--accent)}
+  .typing{display:inline-flex; gap:4px} .typing i{width:6px;height:6px;border-radius:50%;background:var(--mut);
+        animation:bb 1s infinite} .typing i:nth-child(2){animation-delay:.15s} .typing i:nth-child(3){animation-delay:.3s}
+  @keyframes bb{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+
+  /* composer */
+  .composer{border-top:1px solid var(--line); padding:14px 18px; background:rgba(10,13,20,.7)}
+  .crow{display:flex; gap:10px; align-items:center}
+  .crow input{flex:1; font:inherit; color:var(--txt); background:var(--panel); border:1px solid var(--line);
+       border-radius:12px; padding:12px 14px}
+  .crow input:focus{outline:none; border-color:var(--accent)}
+  .samples{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+  .samples .s{font-size:12px; cursor:pointer; border:1px dashed var(--line); border-radius:20px;
+       padding:5px 11px; color:var(--mut)} .samples .s:hover{color:var(--txt); border-color:var(--accent)}
+  .samples .s b{color:var(--accent2)}
+
+  /* right panel */
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:14px}
+  .card h4{margin:0 0 8px; font-size:14px; display:flex; gap:8px; align-items:center}
+  .card p{margin:0 0 8px; color:var(--mut); font-size:13px}
+  .zoomctl{float:right; display:flex; gap:4px}
+  .zoomctl button{background:var(--bg); color:var(--mut); border:1px solid var(--line);
+       border-radius:6px; padding:2px 8px; font-size:12px; cursor:pointer; font-weight:600}
+  .zoomctl button:hover{color:var(--txt); border-color:var(--accent)}
+  .diaview{background:var(--bg); border:1px solid var(--line); border-radius:12px;
+           overflow:hidden; position:relative; height:230px; cursor:grab; touch-action:none}
+  .diaview.grabbing{cursor:grabbing}
+  .diawrap{transform-origin:0 0; will-change:transform; padding:10px; display:inline-block}
+  .diawrap svg{max-width:none}
+  .zoomhint{position:absolute; bottom:6px; right:8px; font-size:10px; color:var(--mut);
+            background:rgba(11,14,20,.7); padding:2px 6px; border-radius:6px; pointer-events:none}
+  .mcpreg{background:#0e1726; border:1px solid #24406b; border-radius:10px; padding:8px 10px;
+          margin-bottom:10px; font-size:12px; animation:slide .25s ease}
+  .mcpreg b{color:var(--accent)}
+  .mcpreg .tnames{margin-top:5px; display:flex; gap:5px; flex-wrap:wrap}
+  .mcpreg .tnames span{font-size:11px; background:var(--bg); border:1px solid var(--line);
+          border-radius:6px; padding:2px 7px; color:var(--mut)}
+  .toktrack{margin-top:5px}
+  .toktrack .lab{font-size:10px; color:var(--mut); display:flex; justify-content:space-between}
+  .toktrack .bar{height:6px; background:#1b2233; border-radius:4px; overflow:hidden; margin-top:2px}
+  .toktrack .bar i{display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .toktrack .up{color:var(--warn)}
+  /* per-query (run) monitoring */
+  .msg.assistant .bubble{cursor:pointer}
+  .msg.assistant.focused .bubble{box-shadow:0 0 0 1px var(--accent), var(--shadow)}
+  .perf{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center}
+  .perf .chip{cursor:pointer}
+  .perf .mon{color:var(--accent); border-color:var(--accent)}
+  .mon-head{background:linear-gradient(180deg,#13203a,#141a28); border-color:#2c3a5e}
+  .qmsg{color:var(--mut); font-size:12px; font-style:italic; margin:2px 0 8px}
+  .nexthint{font-size:12px; color:var(--mut); white-space:nowrap}
+  .nexthint b{color:var(--accent)}
+  .focusbanner{font-size:11px; color:var(--warn); margin-bottom:8px}
+  .diagram{background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:10px;
+           overflow-x:auto; display:flex; justify-content:center}
+  .diagram svg{max-width:100%}
+  #diaModal .box{width:min(1100px,96vw); height:86vh; display:flex; flex-direction:column}
+  #diaModal .diaview{flex:1; height:auto}
+  .diagram svg .node.pulse *{stroke:#34d399 !important; stroke-width:3px !important}
+  .diagram svg .node.pulse{animation:np .7s ease 2}
+  .diagram svg .node.pulseR *{stroke:#f87171 !important; stroke-width:3px !important}
+  .diagram svg .node.pulseR{animation:npr .7s ease 2}
+  @keyframes np{50%{filter:drop-shadow(0 0 9px #34d399)}}
+  @keyframes npr{50%{filter:drop-shadow(0 0 9px #f87171)}}
+  .diagram svg path.flowchart-link.edgeGlow{stroke:#34d399 !important; stroke-width:3px !important;
+       filter:drop-shadow(0 0 6px #34d399); stroke-dasharray:9 6; animation:dash .7s linear}
+  .diagram svg path.flowchart-link.edgeGlowR{stroke:#f87171 !important; stroke-width:3px !important;
+       filter:drop-shadow(0 0 6px #f87171); stroke-dasharray:9 6; animation:dash .7s linear}
+  @keyframes dash{to{stroke-dashoffset:-30}}
+  .cursor{display:inline-block;width:7px;height:15px;background:var(--accent);
+          margin-left:2px;vertical-align:text-bottom;animation:bl 1s steps(2) infinite}
+  @keyframes bl{50%{opacity:0}}
+  .pills{display:flex; gap:6px; flex-wrap:wrap}
+  .pill{font-size:11px; padding:3px 9px; border-radius:8px; background:var(--bg)}
+  .pill.good{color:var(--ok); border:1px solid #1e3a2e} .pill.warn{color:var(--warn); border:1px solid #3a341e}
+  /* api timeline */
+  .tl{display:flex; flex-direction:column; gap:8px}
+  .tl .step{display:flex; gap:10px; align-items:center; font-size:13px; padding:8px 10px;
+       background:var(--bg); border:1px solid var(--line); border-radius:10px; animation:slide .25s ease}
+  @keyframes slide{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+  .verb{font-size:10px; font-weight:800; padding:3px 7px; border-radius:6px; min-width:54px; text-align:center}
+  .verb.GET{background:#0e2a20; color:var(--get); border:1px solid #1e5a44}
+  .verb.POST{background:#2a230e; color:var(--write); border:1px solid #5a4a1e}
+  .verb.BLK{background:#2a1414; color:var(--bad); border:1px solid #5a2424}
+  .path{font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--txt); word-break:break-all}
+  .stepwrap{display:flex; flex-direction:column; gap:3px}
+  .why{color:var(--mut); font-size:12px; font-style:italic; padding-left:8px; border-left:2px solid var(--line); margin-left:6px}
+  .turn{padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:10px;
+        margin-bottom:8px; animation:slide .25s ease}
+  .turn .th{display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; margin-bottom:3px}
+  .turn .th .tk{margin-left:auto; color:var(--mut); font-weight:400; font-size:11px}
+  .turn .tb{font-size:12px; color:var(--mut)} .turn .tb b{color:var(--accent2)}
+  .turn .tx{font-size:12px; color:var(--txt); margin-top:4px; opacity:.85}
+  .turn details{margin-top:6px}
+  .raw{background:#06080d; border:1px solid var(--line); border-radius:8px; padding:8px;
+       font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#9fb3d1; white-space:pre-wrap;
+       max-height:260px; overflow:auto; margin:4px 0}
+  .rawlbl{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin-top:6px}
+  .empty{color:var(--mut); font-size:13px; text-align:center; padding:18px}
+  .accbar{height:7px;border-radius:5px;background:#222a3c;overflow:hidden;margin:8px 0}
+  .accbar i{display:block;height:100%}
+  /* compare modal */
+  .cmp{position:fixed; inset:0; background:rgba(4,6,12,.7); display:none; align-items:center; justify-content:center; z-index:50}
+  .cmp.open{display:flex}
+  .cmp .box{background:var(--panel2); border:1px solid var(--line); border-radius:16px; width:min(1000px,94vw);
+       max-height:88vh; overflow:auto; padding:20px; box-shadow:var(--shadow)}
+  .cmp h2{margin:0 0 4px; font-size:18px} .cmp .sub{color:var(--mut); margin-bottom:14px; font-size:13px}
+  table.cmpt{width:100%; border-collapse:collapse; font-size:13px}
+  table.cmpt th,table.cmpt td{border-bottom:1px solid var(--line); padding:9px 10px; text-align:left; vertical-align:top}
+  table.cmpt th{color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.05em}
+  table.cmpt td.ans{max-width:280px; color:var(--mut); font-size:12px}
+  .win{color:var(--ok); font-weight:700}
+  .x{float:right; cursor:pointer; color:var(--mut); font-size:20px}
+  .hrun{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; background:var(--panel)}
+  .hrun .top{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px}
+  .hrun .src{font-size:10px; font-weight:800; padding:2px 7px; border-radius:6px; background:var(--bg); color:var(--mut)}
+  .hrun .src.web{color:var(--accent)} .hrun .src.cli{color:var(--accent2)}
+  .hrun .intent{font-size:14px; margin:4px 0 8px}
+  .hrun .ts{color:var(--mut); font-size:11px; margin-left:auto}
+  .hrun .calls{font-size:12px; color:var(--mut)}
+  .hrun .calls .c{padding:3px 0}
+  .hrun .calls code{color:var(--txt); background:var(--bg); padding:1px 6px; border-radius:5px}
+  .hrun .calls code.blk{color:var(--bad)}
+  .hrun .acts{margin-top:8px; display:flex; gap:8px}
+  .hrun .acts button{background:var(--bg); color:var(--accent); border:1px solid var(--line);
+        border-radius:8px; padding:4px 10px; font-size:12px; cursor:pointer; font-weight:600}
+  .hrun .acts button:hover{border-color:var(--accent)}
+  /* pinned compare table */
+  table.pint{width:100%; border-collapse:collapse; font-size:13px}
+  table.pint th,table.pint td{border:1px solid var(--line); padding:8px 10px; vertical-align:top; text-align:left}
+  table.pint th{background:var(--bg)}
+  table.pint td.dim{color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.05em; width:120px; background:#0d1119}
+  table.pint .tool{display:inline-block; font-size:11px; background:var(--bg); border:1px solid var(--line);
+        border-radius:6px; padding:1px 7px; margin:2px 3px 0 0}
+  table.pint .win{color:var(--ok); font-weight:700}
+  table.pint .unpin{float:right; cursor:pointer; color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> TiefBench <small>· API-to-Agent POC</small></div>
+  <div class="spacer"></div>
+  <span class="badge" id="envBadge">…</span>
+  <label class="toggle"><input type="checkbox" id="grade"> grade accuracy</label>
+  <label class="toggle"><input type="checkbox" id="raw"> show raw</label>
+  <button class="btn ghost" id="historyBtn">🕘 History</button>
+  <button class="btn ghost" id="pinBtn">📌 Pinned (0)</button>
+  <button class="btn ghost" id="compareBtn">⚖️ Compare all 5</button>
+</header>
+
+<div class="app">
+  <!-- LEFT: option chooser -->
+  <div class="col left">
+    <h3 class="section">Choose an approach</h3>
+    <div id="opts"></div>
+  </div>
+
+  <!-- CENTER: chat -->
+  <div class="col center">
+    <div class="chat" id="chat"></div>
+    <div class="composer">
+      <div class="crow">
+        <input id="input" placeholder="Ask about the portfolio in plain English…" autofocus>
+        <span class="nexthint" id="nextopt"></span>
+        <button class="btn" id="send">Send ➤</button>
+      </div>
+      <div class="samples" id="samples"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: explain + workflow + last run -->
+  <div class="col right" id="right"></div>
+</div>
+
+<!-- pinned runs compare modal -->
+<div class="cmp" id="pin"><div class="box">
+  <span class="x" onclick="document.getElementById('pin').classList.remove('open')">✕</span>
+  <h2>📌 Pinned runs — side by side</h2>
+  <div class="sub">Diff how different approaches (or prompts) selected tools and performed. Pin runs from any answer or History.</div>
+  <div id="pinBody"></div>
+</div></div>
+
+<!-- diagram fullscreen modal -->
+<div class="cmp" id="diaModal"><div class="box">
+  <span class="x" onclick="document.getElementById('diaModal').classList.remove('open')">✕</span>
+  <h2>🗺️ Workflow — <span id="diaModalTitle" style="font-weight:400;color:var(--mut)"></span></h2>
+  <div class="diaview" id="diaviewBig"><div class="diawrap" id="diawrapBig"></div>
+    <div class="zoomhint">scroll = zoom · drag = pan</div></div>
+</div></div>
+
+<!-- history modal -->
+<div class="cmp" id="hist"><div class="box">
+  <span class="x" onclick="document.getElementById('hist').classList.remove('open')">✕</span>
+  <h2>🕘 Recent runs <span style="font-size:13px;color:var(--mut)">· from cache DB</span></h2>
+  <div class="sub">Every turn (web + CLI) is persisted with its captured intent and per-call reasons.</div>
+  <div id="histBody"></div>
+</div></div>
+
+<!-- compare modal -->
+<div class="cmp" id="cmp"><div class="box">
+  <span class="x" onclick="document.getElementById('cmp').classList.remove('open')">✕</span>
+  <h2>⚖️ Same prompt, all 5 options</h2>
+  <div class="sub" id="cmpPrompt"></div>
+  <div id="cmpBody"></div>
+</div></div>
+
+<script>
+mermaid.initialize({startOnLoad:false, theme:'dark', securityLevel:'loose',
+  themeVariables:{fontSize:'13px', primaryColor:'#1a2030', lineColor:'#5b6b8c'}});
+
+let CFG=null, current='b', activeRun=null;
+const $ = s=>document.querySelector(s);
+const chat=$('#chat'), input=$('#input');
+const SAMPLES=[
+  {tag:'Read', t:'What does my portfolio look like right now?'},
+  {tag:'Multi-step', t:'Give me a read on AMD: analysis, my thesis, and the bear-case challenge.'},
+  {tag:'Governed write', t:'Record a BUY of 10 shares of AMD at $230 dated 2026-06-28.'},
+];
+
+function el(html){const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild;}
+function scroll(){chat.scrollTop=chat.scrollHeight;}
+const verbClass=v=>v==='GET'?'GET':(v==='BLOCKED'?'BLK':'POST');
+
+function renderOptions(){
+  const box=$('#opts'); box.innerHTML='';
+  CFG.options.forEach(o=>{
+    const card=el(`<div class="opt ${o.key===current?'active':''}" data-k="${o.key}">
+      <div class="ic">${o.icon||'•'}</div>
+      <div><div class="k">OPTION ${o.key.toUpperCase()}</div>
+      <div class="nm">${o.label}</div><div class="tg">${o.tagline||''}</div></div></div>`);
+    card.onclick=()=>{
+      current=o.key; renderOptions(); updateNextHint();
+      if(!activeRun) renderRight();          // only refresh preview when nothing is being monitored
+      narrate(o);
+    };
+    box.appendChild(card);
+  });
+}
+
+function meta(){return CFG.options.find(o=>o.key===current);}
+function optMeta(k){return CFG.options.find(o=>o.key===k)||meta();}
+function updateNextHint(){
+  const o=meta(); const n=$('#nextopt');
+  if(n) n.innerHTML = `next ▶ <b>${o.icon} ${o.label}</b>`;
+}
+
+// The right panel = MONITOR for the focused run. If `run` is given it shows that
+// run's option + telemetry; otherwise it previews the currently-selected option.
+async function renderRight(run){
+  const key = run ? run.optionKey : current;
+  const o = optMeta(key); const r=$('#right');
+  const focusOther = run && run.optionKey!==current
+    ? `<div class="focusbanner">Monitoring a past <b>${o.label}</b> run · next query uses ${meta().label}</div>` : '';
+  const head = run
+    ? `<div class="card mon-head"><h4>📊 Query monitor <span class="chip mon">${o.icon} ${o.label}</span>
+         <span style="float:right;color:var(--mut);font-size:11px">${run.status==='running'?'● live':'recorded'}</span></h4>
+         ${focusOther}<div class="qmsg">“${(run.message||'').slice(0,140)}”</div>
+         <div id="perfsum" class="metrics"></div></div>` : '';
+  r.innerHTML = head + `
+    <div class="card" id="intentCard"><h4>🎯 Captured intent</h4>
+      <div id="intentBody"><div class="empty">Ask something — the agent's understood intent appears here first.</div></div></div>
+    <div class="card">
+      <h4>${o.icon} Option ${o.key.toUpperCase()} — ${o.label}</h4>
+      <p>${o.summary||''}</p>
+      <p style="color:var(--accent2)"><b>How it reaches the API:</b> ${o.reaches||''}</p>
+      <div class="pills">
+        ${(o.strengths||[]).map(s=>`<span class="pill good">👍 ${s}</span>`).join('')}
+        ${(o.watch||[]).map(s=>`<span class="pill warn">⚠ ${s}</span>`).join('')}
+      </div>
+    </div>
+    <div class="card"><h4>🗺️ Workflow
+      <span class="zoomctl">
+        <button onclick="zoomBy(1.25)" title="zoom in">+</button>
+        <button onclick="zoomBy(0.8)" title="zoom out">−</button>
+        <button onclick="zoomReset()" title="reset">⟲</button>
+        <button onclick="expandDiagram()" title="fullscreen">⤢</button>
+      </span></h4>
+      <div class="diaview" id="diaview"><div class="diawrap" id="diawrap"><div class="diagram" id="dia">rendering…</div></div>
+        <div class="zoomhint">scroll = zoom · drag = pan</div></div></div>
+    <div class="card"><h4>🔁 Agent loop <span id="looplbl" style="color:var(--mut);font-weight:400;font-size:12px"></span></h4>
+      <div id="loop"><div class="empty">Each model turn (prompt → decision → tool calls) appears here.</div></div></div>
+    <div class="card"><h4>📡 API invocations <span id="runlbl" style="color:var(--mut);font-weight:400;font-size:12px"></span></h4>
+      <div id="run"></div></div>`;
+  try{
+    const {svg}=await mermaid.render('m'+Date.now(), o.mermaid);
+    $('#dia').innerHTML=svg;
+    inlineZoom=makePanZoom($('#diaview'),$('#diawrap'));
+    setTimeout(()=>inlineZoom.reset(), 30);
+  }catch(e){ $('#dia').innerHTML='<div class="empty">diagram error</div>'; }
+  if(run && run.status!=='running') fillMonitor(run);   // recorded → replay telemetry
+  else renderRun(null);                                  // preview/live → empty
+}
+
+// Replay a stored run's telemetry into the monitor cards.
+function fillMonitor(run){
+  renderIntent(run.intent || {intent:'(no intent captured)', action_type:'', entities:[], plan:[]});
+  $('#loop').innerHTML=''; _prevTokIn=0;
+  if(run.toolsReg) showRegistration({tools:run.toolsReg});
+  (run.turns||[]).forEach((t,i)=>{ t._n=i+1; addTurn(t); });
+  $('#looplbl').textContent=`· ${(run.turns||[]).length} turns`;
+  $('#run').innerHTML='<div class="tl" id="livetl"></div><div id="livemetrics" class="metrics"></div><div id="liveacc"></div>';
+  (run.calls||[]).forEach(c=> addLiveStep(c));
+  $('#runlbl').textContent='· recorded';
+  if(run.metrics){ doneMetrics(run.metrics); fillPerfSum(run); }
+}
+function fillPerfSum(run){
+  const el2=$('#perfsum'); if(el2 && run.metrics) el2.innerHTML=metricsChips(run.metrics,(run.turns||[]).length);
+}
+function metricsChips(d, turns){
+  const a=d.accuracy;
+  const acc=a?`<span class="chip ${a.score>=85?'ok':a.score>=50?'warn':'bad'}">acc ${a.score}</span>`:'';
+  return `${d.had_write_blocked?'<span class="chip ok">🛡️ blocked</span>':''}
+    <span class="chip"><b>${turns??'·'}</b> turns</span>
+    <span class="chip"><b>${d.executed}</b> api</span>
+    <span class="chip"><b>${d.tokens_in}/${d.tokens_out}</b> tok</span>
+    <span class="chip"><b>$${d.cost_usd}</b></span>
+    <span class="chip"><b>${d.latency_s}s</b></span>${acc}`;
+}
+// Make a past run the focused one (monitor follows runs, not the selector).
+function focusRun(run, node){
+  activeRun=run;
+  document.querySelectorAll('.msg.assistant').forEach(m=>m.classList.remove('focused'));
+  if(node) node.classList.add('focused');
+  renderRight(run);
+}
+
+function renderRun(d){
+  const run=$('#run'), lbl=$('#runlbl');
+  if(!d){ run.innerHTML='<div class="empty">Send a message to see the live API calls & metrics.</div>'; lbl.textContent=''; return; }
+  lbl.textContent='· last turn';
+  const steps=(d.trace||[]).map(t=>{
+    const blocked=t.startsWith('BLOCKED');
+    const [verb,path]=t.replace('BLOCKED ','').split(' ');
+    return `<div class="step"><span class="verb ${blocked?'BLK':verbClass(verb)}">${blocked?'BLOCKED':verb}</span>
+      <span class="path">${path||t}</span></div>`;
+  }).join('') || '<div class="empty">No API calls (model answered directly).</div>';
+  let acc='';
+  if(d.accuracy){const a=d.accuracy,sc=a.score;
+    const c=sc==null?'#8a93a8':sc>=85?'#34d399':sc>=50?'#fbbf24':'#f87171';
+    acc=`<div style="margin-top:12px"><b style="color:${c}">Accuracy ${sc==null?'n/a':sc+'/100'}</b>
+      <span style="color:${c}"> · ${a.verdict||''}</span>
+      <div class="accbar"><i style="width:${sc||0}%;background:${c}"></i></div>
+      ${a.notes?`<div style="color:var(--mut);font-size:12px">${a.notes}</div>`:''}
+      ${(a.issues||[]).length?`<ul style="color:var(--bad);font-size:12px;margin:6px 0 0;padding-left:18px">${a.issues.map(i=>`<li>${i}</li>`).join('')}</ul>`:''}</div>`;
+  }
+  run.innerHTML=`<div class="tl">${steps}</div>
+    <div class="metrics">
+      ${d.had_write_blocked?'<span class="chip ok">🛡️ write BLOCKED (approval)</span>':''}
+      <span class="chip"><b>${d.executed}</b> API calls</span>
+      <span class="chip"><b>${d.llm_calls}</b> LLM calls</span>
+      <span class="chip"><b>${d.tokens_in}/${d.tokens_out}</b> tokens</span>
+      <span class="chip"><b>$${d.cost_usd}</b></span>
+      <span class="chip"><b>${d.latency_s}s</b></span>
+    </div>${acc}`;
+}
+
+function narrate(o){
+  chat.appendChild(el(`<div class="msg"><div class="who">guide</div>
+    <div class="bubble">Now demoing <b>Option ${o.key.toUpperCase()} — ${o.label}</b>. ${o.summary}
+    <br><br>Watch the <b>Workflow</b> diagram and <b>API invocations</b> panel on the right as it runs.</div></div>`));
+  scroll();
+}
+
+function addUser(t){chat.appendChild(el(`<div class="msg user"><div class="who">you</div><div class="bubble"></div></div>`));
+  chat.lastChild.querySelector('.bubble').textContent=t; scroll();}
+
+async function call(option,message){
+  const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({option,message,grade:$('#grade').checked})});
+  return r.json();
+}
+
+// Ordered node paths per option, so a call lights up the workflow node-by-node.
+// read = path to the API node; write = path to the Approval node.
+const SEQ = {
+  a:{read:[/writes python/i,/sandbox/i,/gateway/i,/tiefstocks|api/i],
+     write:[/writes python/i,/sandbox/i,/gateway/i,/approval/i]},
+  b:{read:[/claude/i,/dispatch/i,/tiefstocks|api/i],
+     write:[/claude/i,/dispatch/i,/approval/i]},
+  c:{read:[/claude/i,/mcp client/i,/mcp server/i,/tiefstocks|api/i],
+     write:[/claude/i,/mcp client/i,/mcp server/i,/approval/i]},
+  d:{read:[/plans operations/i,/runner/i,/mrapids/i,/tiefstocks|api/i],
+     write:[/plans operations/i,/runner/i,/approval/i]},
+  e:{read:[/router/i,/scope\?/i,/sub-agent/i,/tiefstocks|api/i],
+     write:[/router/i,/scope\?/i,/sub-agent/i,/approval/i]},
+};
+function findNode(rx){
+  const svg=document.querySelector('#dia svg'); if(!svg) return null;
+  return [...svg.querySelectorAll('.node')].find(n=>rx.test(n.textContent));
+}
+function flash(node,cls){ if(!node)return; node.classList.add(cls); setTimeout(()=>node.classList.remove(cls),950); }
+// Map each edge to its two nearest nodes (geometry-based, renderer-independent).
+function edgeIndex(){
+  const svg=document.querySelector('#dia svg'); if(!svg) return [];
+  const nodes=[...svg.querySelectorAll('.node')].map(n=>{
+    const r=n.getBoundingClientRect(); return {n, x:r.x+r.width/2, y:r.y+r.height/2};
+  });
+  const near=pt=>nodes.reduce((b,nd)=>{const d=(nd.x-pt.x)**2+(nd.y-pt.y)**2; return d<b.d?{d,nd}:b;},{d:1e18,nd:null}).nd;
+  return [...svg.querySelectorAll('path.flowchart-link')].map(p=>{
+    try{ const L=p.getTotalLength(), m=p.getScreenCTM();
+      return {p, a:near(p.getPointAtLength(0).matrixTransform(m)),
+                 b:near(p.getPointAtLength(L).matrixTransform(m))};
+    }catch(e){ return {p,a:null,b:null}; }
+  });
+}
+function findEdge(edges,a,b){
+  return edges.find(e=>e.a&&e.b&&((e.a.n===a&&e.b.n===b)||(e.a.n===b&&e.b.n===a)));
+}
+function glowEdge(e,cls){ if(!e||!e.p)return; e.p.classList.add(cls); setTimeout(()=>e.p.classList.remove(cls),720); }
+// ---- pan / zoom for the workflow diagram ----
+let inlineZoom=null;
+function makePanZoom(view, wrap){
+  const st={s:1,x:0,y:0};
+  st.apply=()=>wrap.style.transform=`translate(${st.x}px,${st.y}px) scale(${st.s})`;
+  st.zoomAt=(cx,cy,f)=>{ const r=view.getBoundingClientRect(), px=cx-r.left, py=cy-r.top;
+    st.x=px-(px-st.x)*f; st.y=py-(py-st.y)*f; st.s=Math.max(0.2,Math.min(6,st.s*f)); st.apply(); };
+  st.reset=()=>{ const svg=wrap.querySelector('svg'); st.s=1;st.x=0;st.y=0;st.apply(); if(!svg)return;
+    const r=view.getBoundingClientRect(), b=svg.getBoundingClientRect();
+    const s=Math.min(r.width/b.width, r.height/b.height, 1)*0.95;
+    st.s=s; st.x=(r.width-b.width*s)/2; st.y=Math.max(6,(r.height-b.height*s)/2); st.apply(); };
+  view.addEventListener('wheel',e=>{e.preventDefault(); st.zoomAt(e.clientX,e.clientY, e.deltaY<0?1.12:0.89);},{passive:false});
+  let drag=null;
+  view.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,ox:st.x,oy:st.y};
+    view.setPointerCapture(e.pointerId); view.classList.add('grabbing');});
+  view.addEventListener('pointermove',e=>{ if(!drag)return; st.x=drag.ox+(e.clientX-drag.x); st.y=drag.oy+(e.clientY-drag.y); st.apply(); });
+  view.addEventListener('pointerup',()=>{drag=null; view.classList.remove('grabbing');});
+  return st;
+}
+function zoomBy(f){ if(!inlineZoom)return; const r=$('#diaview').getBoundingClientRect();
+  inlineZoom.zoomAt(r.left+r.width/2, r.top+r.height/2, f); }
+function zoomReset(){ inlineZoom && inlineZoom.reset(); }
+function expandDiagram(){
+  const svg=$('#dia svg'); if(!svg) return;
+  $('#diaModalTitle').textContent = meta()?meta().label:'';
+  $('#diawrapBig').innerHTML = '<div class="diagram">'+svg.outerHTML+'</div>';
+  $('#diaModal').classList.add('open');
+  const z=makePanZoom($('#diaviewBig'),$('#diawrapBig'));
+  setTimeout(z.reset, 30);
+}
+
+// single-node pulse (used for the initial 'model' think)
+function pulse(kind){
+  const rx = kind==='model' ? /claude|router/i : /tiefstocks|api/i;
+  flash(findNode(rx), 'pulse');
+}
+// node-by-node walk along the option's path, glowing the edge between each pair
+function walkPath(kind){
+  const seq=(SEQ[current]||SEQ.b)[kind]||[]; const STEP=420;
+  const nodes=seq.map(rx=>findNode(rx));
+  const edges=edgeIndex();
+  nodes.forEach((nd,idx)=>{
+    const last = idx===nodes.length-1;
+    const write = kind==='write' && last;
+    if(idx>0){  // glow the connecting edge just before the next node lights up
+      setTimeout(()=>glowEdge(findEdge(edges,nodes[idx-1],nd), write?'edgeGlowR':'edgeGlow'),
+                 idx*STEP - STEP*0.45);
+    }
+    setTimeout(()=>flash(nd, write?'pulseR':'pulse'), idx*STEP);
+  });
+}
+function renderIntent(ev){
+  const b=$('#intentBody'); if(!b) return;
+  if(ev==='loading'){ b.innerHTML='<div class="empty">🎯 capturing intent…</div>'; return; }
+  const at=ev.action_type||''; const atc=at==='write'?'bad':at==='analysis'?'acc':'ok';
+  b.innerHTML=`<div style="font-size:14px;margin-bottom:8px">“${ev.intent||''}”</div>
+    <div class="pills" style="margin-bottom:8px">
+      <span class="chip ${atc}">${at}</span>
+      ${(ev.entities||[]).map(e=>`<span class="chip"><b>${e}</b></span>`).join('')}</div>
+    ${(ev.plan||[]).length?`<div style="color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">planned steps</div>
+      <ol style="margin:0;padding-left:18px;color:var(--mut);font-size:13px">${ev.plan.map(p=>`<li>${p}</li>`).join('')}</ol>`:''}
+    <div style="color:var(--mut);font-size:11px;margin-top:6px">intent model · ${ev.model||''}</div>`;
+}
+function prepRun(){
+  const run=$('#run'); if(!run) return;
+  $('#runlbl').textContent='· live';
+  run.innerHTML='<div class="tl" id="livetl"></div><div id="livemetrics" class="metrics"><span class="chip">running…</span></div><div id="liveacc"></div>';
+  const loop=$('#loop'); if(loop){ loop.innerHTML=''; $('#looplbl').textContent='· live'; } _prevTokIn=0;
+}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function rawBlock(ev){
+  if(!ev.raw_input && !ev.raw_output) return '';
+  return `<details><summary style="color:var(--accent);font-size:12px">🔬 show raw payload</summary>
+    <div class="rawlbl">prompt (system + messages)</div><div class="raw">${esc(ev.raw_input)}</div>
+    <div class="rawlbl">raw response</div><div class="raw">${esc(ev.raw_output)}</div></details>`;
+}
+let _prevTokIn=0;
+function tokenBar(ev){
+  const cap=12000, w=Math.max(3,Math.min(100,Math.round(100*(ev.tokens_in||0)/cap)));
+  const up = ev._delta>0?`<span class="up">▲ +${ev._delta.toLocaleString()}</span>`:'';
+  return `<div class="toktrack"><div class="lab"><span>prompt tokens (context)</span>
+    <span>${(ev.tokens_in||0).toLocaleString()} ${up}</span></div><div class="bar"><i style="width:${w}%"></i></div></div>`;
+}
+function turnLine(ev){
+  const tools=(ev.tools||[]).map(t=>t.name);
+  const kind = tools.length ? `→ calls <b>${tools.join(', ')}</b>`
+             : (ev.stop_reason==='end_turn' ? '→ produces final answer' : '→ (no tool calls)');
+  const lbl = ev.label?`<span class="chip">${ev.label}</span>`:'';
+  const tx = (!tools.length && ev.text) ? `<div class="tx">“${(ev.text||'').slice(0,140)}…”</div>` : '';
+  return `<div class="turn"><div class="th">Turn ${ev._n} ${lbl}<span class="tk">${ev.tokens_in}/${ev.tokens_out} tok</span></div>
+    <div class="tb">${kind}</div>${tokenBar(ev)}${tx}${rawBlock(ev)}</div>`;
+}
+function addTurn(ev){
+  ev._delta = ev._n>1 ? ((ev.tokens_in||0)-_prevTokIn) : 0; _prevTokIn=ev.tokens_in||0;
+  const box=$('#loop'); if(box) box.appendChild(el(turnLine(ev)));
+}
+function showRegistration(ev){
+  const box=$('#loop'); if(!box) return;
+  box.appendChild(el(`<div class="mcpreg">🔌 <b>${ev.tools.length} tools registered</b> via <code>tools/list</code> (runtime discovery)
+    <div class="tnames">${ev.tools.map(t=>`<span>${t}</span>`).join('')}</div>
+    <div style="color:var(--mut);margin-top:5px;font-size:11px">These schemas enter the prompt → watch turn 1's prompt tokens.</div></div>`));
+}
+function addLiveStep(ev){
+  const tl=$('#livetl'); if(!tl) return;
+  const blocked=ev.blocked, verb=blocked?'BLOCKED':ev.verb;
+  const cls=blocked?'BLK':(verb==='GET'?'GET':'POST');
+  const why=ev.reason?`<div class="why">↳ ${ev.reason}</div>`:'';
+  tl.appendChild(el(`<div class="stepwrap"><div class="step"><span class="verb ${cls}">${verb}</span>
+    <span class="path">${ev.path}</span></div>${why}</div>`));
+}
+function doneMetrics(d){
+  const m=$('#livemetrics'); if(m) m.innerHTML=`
+    ${d.had_write_blocked?'<span class="chip ok">🛡️ write BLOCKED (approval)</span>':''}
+    <span class="chip"><b>${d.executed}</b> API calls</span>
+    <span class="chip"><b>${d.llm_calls}</b> LLM calls</span>
+    <span class="chip"><b>${d.tokens_in}/${d.tokens_out}</b> tokens</span>
+    <span class="chip"><b>$${d.cost_usd}</b></span>
+    <span class="chip"><b>${d.latency_s}s</b></span>`;
+  const ac=$('#liveacc');
+  if(ac && d.accuracy){const a=d.accuracy,sc=a.score;
+    const c=sc==null?'#8a93a8':sc>=85?'#34d399':sc>=50?'#fbbf24':'#f87171';
+    ac.innerHTML=`<div style="margin-top:12px"><b style="color:${c}">Accuracy ${sc==null?'n/a':sc+'/100'}</b>
+      <span style="color:${c}"> · ${a.verdict||''}</span>
+      <div class="accbar"><i style="width:${sc||0}%;background:${c}"></i></div>
+      ${a.notes?`<div style="color:var(--mut);font-size:12px">${a.notes}</div>`:''}
+      ${(a.issues||[]).length?`<ul style="color:var(--bad);font-size:12px;margin:6px 0 0;padding-left:18px">${a.issues.map(i=>`<li>${i}</li>`).join('')}</ul>`:''}</div>`;
+  }
+}
+
+async function send(){
+  const text=input.value.trim(); if(!text) return;
+  input.value=''; $('#send').disabled=true;
+  addUser(text);
+  const o=meta();
+  // one telemetry object per query — this is what makes monitoring persistent
+  const run={optionKey:current, label:o.label, icon:o.icon, message:text,
+             status:'running', intent:null, toolsReg:null, turns:[], calls:[], metrics:null};
+  activeRun=run;
+  const node=el(`<div class="msg assistant focused"><div class="who">${o.icon} ${o.label} · running</div>
+    <div class="bubble"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
+  document.querySelectorAll('.msg.assistant').forEach(m=>m.classList.remove('focused'));
+  chat.appendChild(node); node.classList.add('focused');
+  node._run=run; node.onclick=()=>focusRun(run,node);
+  const bubble=node.querySelector('.bubble');
+  await renderRight(run);                 // monitor follows this run's option
+  prepRun(); pulse('model'); renderIntent('loading');
+  let answer='', started=false, pendingReason=null, turnN=0;
+  try{
+    const resp=await fetch('/api/chat_stream',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({option:current,message:text,grade:$('#grade').checked,raw:$('#raw').checked})});
+    const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
+    while(true){
+      const {value,done}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true}); let i;
+      while((i=buf.indexOf('\n\n'))>=0){
+        const frame=buf.slice(0,i); buf=buf.slice(i+2);
+        if(!frame.startsWith('data:')) continue;
+        const ev=JSON.parse(frame.slice(frame.indexOf('{')));
+        if(ev.type==='intent'){ run.intent=ev; renderIntent(ev); }
+        else if(ev.type==='tools'){ run.toolsReg=ev.tools; showRegistration(ev); }
+        else if(ev.type==='turn'){ ev._n=++turnN; run.turns.push(ev); addTurn(ev); }
+        else if(ev.type==='reason'){ pendingReason=ev.reason; }
+        else if(ev.type==='token'){
+          if(!started){bubble.innerHTML=''; started=true;}
+          answer+=ev.text; bubble.innerHTML=answer.replace(/</g,'&lt;')+'<span class="cursor"></span>'; scroll();
+        } else if(ev.type==='api'){ ev.reason=pendingReason; pendingReason=null;
+          run.calls.push({verb:ev.verb,path:ev.path,blocked:ev.blocked,reason:ev.reason});
+          addLiveStep(ev); walkPath(ev.blocked?'write':'read'); }
+        else if(ev.type==='done'){
+          run.status='done'; run.metrics=ev;
+          node.querySelector('.who').textContent=`${o.icon} ${ev.option||o.label} · ${ev.model||''}`;
+          bubble.textContent = ev.error&&!ev.answer ? '⚠️ '+ev.error : ev.answer;
+          // inline per-query performance, click to re-open this run's monitor
+          const perf=el(`<div class="perf">${metricsChips(ev,turnN)}<span class="chip mon" data-act="mon">🔍 monitor</span><span class="chip" data-act="pin">📌 pin</span></div>`);
+          perf.querySelector('[data-act="pin"]').onclick=(e)=>{e.stopPropagation(); togglePin(run);
+            e.target.textContent = isPinned(run.id)?'📌 pinned':'📌 pin';};
+          node.appendChild(perf);
+          $('#runlbl').textContent='· last turn'; $('#looplbl').textContent=`· ${turnN} turns`;
+          doneMetrics(ev); fillPerfSum(run);
+        }
+      }
+    }
+  }catch(e){ bubble.textContent='Network error: '+e; }
+  $('#send').disabled=false; input.focus();
+}
+
+async function compare(){
+  const text=input.value.trim()||SAMPLES[0].t;
+  $('#cmpPrompt').textContent='“'+text+'”'+($('#grade').checked?' · graded':'');
+  $('#cmpBody').innerHTML='<div class="empty">Running all 5 options in parallel…</div>';
+  $('#cmp').classList.add('open');
+  const keys=CFG.options.map(o=>o.key);
+  const results=await Promise.all(keys.map(k=>call(k,text).then(d=>({k,d})).catch(e=>({k,d:{error:String(e)}}))));
+  const minCost=Math.min(...results.map(r=>r.d.cost_usd||Infinity));
+  const minLat=Math.min(...results.map(r=>r.d.latency_s||Infinity));
+  const rows=results.map(({k,d})=>{
+    const o=CFG.options.find(x=>x.key===k);
+    return `<tr>
+      <td><b>${o.icon} ${k.toUpperCase()}</b><br><span style="color:var(--mut)">${o.label}</span></td>
+      <td>${d.executed??'–'}${d.had_write_blocked?' <span class="chip ok">🛡️</span>':''}</td>
+      <td>${d.llm_calls??'–'}</td>
+      <td>${d.tokens_in??'–'}/${d.tokens_out??'–'}</td>
+      <td class="${d.cost_usd===minCost?'win':''}">$${d.cost_usd??'–'}</td>
+      <td class="${d.latency_s===minLat?'win':''}">${d.latency_s??'–'}s</td>
+      <td>${d.accuracy?`<b>${d.accuracy.score}</b> ${d.accuracy.verdict}`:'—'}</td>
+      <td class="ans">${(d.answer||d.error||'').slice(0,160)}…</td></tr>`;
+  }).join('');
+  $('#cmpBody').innerHTML=`<table class="cmpt"><thead><tr>
+    <th>Option</th><th>API</th><th>LLM</th><th>Tokens</th><th>Cost</th><th>Latency</th><th>Accuracy</th><th>Answer</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    <p style="color:var(--mut);font-size:12px;margin-top:12px">Green = best on that metric. Cheapest/fastest aren't always most accurate — that's the trade-off this POC surfaces.</p>`;
+}
+
+// ---- pin & side-by-side compare ----
+let PINNED=[], _runSeq=0;
+function updatePinBtn(){ $('#pinBtn').textContent=`📌 Pinned (${PINNED.length})`; }
+function isPinned(id){ return PINNED.some(r=>r.id===id); }
+function togglePin(run){
+  if(!run.id) run.id='r'+(++_runSeq);
+  const i=PINNED.findIndex(r=>r.id===run.id);
+  if(i>=0) PINNED.splice(i,1); else PINNED.push(run);
+  updatePinBtn();
+}
+function runMetrics(run){ return run.metrics||{}; }
+function runTools(run){   // flattened tool-selection across the loop
+  const t=[]; (run.turns||[]).forEach(tn=>(tn.tools||[]).forEach(x=>t.push(x.name)));
+  return [...new Set(t)];
+}
+function pinnedCompare(){
+  $('#pin').classList.add('open');
+  if(!PINNED.length){ $('#pinBody').innerHTML='<div class="empty">No pinned runs. Click 📌 on any answer or History entry, then reopen this.</div>'; return; }
+  const runs=PINNED;
+  const m=runs.map(runMetrics);
+  const min=k=>Math.min(...m.map(x=>x[k]??Infinity));
+  const accOf=x=>x.accuracy?x.accuracy.score:(x.acc_score??null);
+  const bestCost=min('cost_usd'), bestLat=min('latency_s');
+  const accVals=m.map(accOf).filter(v=>v!=null);
+  const bestAcc=accVals.length?Math.max(...accVals):null;
+  const col=(r,i)=>`<th>${r.icon||'•'} ${r.label}<span class="unpin" onclick="unpinAt(${i})" title="unpin">✕</span>
+      <div style="font-weight:400;color:var(--mut);font-size:11px">“${(r.message||'').slice(0,60)}”</div></th>`;
+  const rowsHtml=[
+    ['Intent', r=>(r.intent&&r.intent.intent)||'—'],
+    ['Tools selected', r=>runTools(r).map(t=>`<span class="tool">${t}</span>`).join('')||'—'],
+    ['Loop turns', r=>(r.turns||[]).length],
+    ['API calls', r=>{const c=runMetrics(r); return `${c.executed??(r.calls||[]).length}${c.had_write_blocked?' 🛡️':''}`;}],
+    ['Tokens in/out', r=>{const c=runMetrics(r); return `${c.tokens_in??'–'}/${c.tokens_out??'–'}`;}],
+    ['Cost $', r=>{const c=runMetrics(r); const w=c.cost_usd===bestCost?'win':''; return `<span class="${w}">$${c.cost_usd??'–'}</span>`;}],
+    ['Latency', r=>{const c=runMetrics(r); const w=c.latency_s===bestLat?'win':''; return `<span class="${w}">${c.latency_s??'–'}s</span>`;}],
+    ['Accuracy', r=>{const a=accOf(runMetrics(r)); const w=a===bestAcc&&a!=null?'win':''; return a!=null?`<span class="${w}">${a}</span>`:'—';}],
+  ].map(([dim,fn])=>`<tr><td class="dim">${dim}</td>${runs.map(r=>`<td>${fn(r)}</td>`).join('')}</tr>`).join('');
+  $('#pinBody').innerHTML=`<table class="pint"><thead><tr><th></th>${runs.map(col).join('')}</tr></thead>
+    <tbody>${rowsHtml}</tbody></table>
+    <p style="color:var(--mut);font-size:12px;margin-top:10px">Green = best on that metric. "Tools selected" shows what each approach actually called — the tool-selection diff.</p>`;
+}
+function unpinAt(i){ PINNED.splice(i,1); updatePinBtn(); pinnedCompare(); }
+
+// ---- history run -> monitor ----
+function historyToRun(r){
+  const key=(r.option||'')[0]?.toLowerCase();
+  const o=optMeta(key)||{};
+  let intent=null;
+  if(r.intent){ let ent=[],plan=[]; try{ent=JSON.parse(r.entities||'[]');}catch(e){} try{plan=JSON.parse(r.plan||'[]');}catch(e){}
+    intent={intent:r.intent, action_type:r.action_type, entities:ent, plan:plan}; }
+  return {
+    id:'h'+r.id, optionKey:key, label:r.option, icon:o.icon||'•', message:r.prompt,
+    status:'done', intent, toolsReg:null, turns:r.turns||[], calls:r.calls||[],
+    metrics:{ executed:r.executed, blocked:r.blocked, had_write_blocked:(r.blocked||0)>0,
+      llm_calls:r.llm_calls, tokens_in:r.tokens_in, tokens_out:r.tokens_out,
+      cost_usd:r.cost_usd, latency_s:r.latency_s,
+      accuracy: r.acc_score!=null?{score:r.acc_score, verdict:r.acc_verdict}:null },
+  };
+}
+function openHistoryRun(r){
+  const run=historyToRun(r);
+  $('#hist').classList.remove('open');
+  focusRun(run, null);
+}
+
+function loopTrace(turns){
+  if(!turns || !turns.length) return '<div class="c">(no turns captured)</div>';
+  let prev=0;
+  return turns.map((t,i)=>{ t._n=i+1; t._delta=i>0?((t.tokens_in||0)-prev):0; prev=t.tokens_in||0; return turnLine(t); }).join('');
+}
+async function openHistory(){
+  $('#histBody').innerHTML='<div class="empty">Loading recent runs…</div>';
+  $('#hist').classList.add('open');
+  let data;
+  try{ data=await (await fetch('/api/history?n=25')).json(); }
+  catch(e){ $('#histBody').innerHTML='<div class="empty">Could not load history.</div>'; return; }
+  const runs=data.runs||[]; window._histRuns=runs;
+  if(!runs.length){ $('#histBody').innerHTML='<div class="empty">No runs yet — ask something first.</div>'; return; }
+  const optIcon=k=>({a:'🐍',b:'🧩',c:'🔌',d:'⚡',e:'🧭'}[(k||'')[0]?.toLowerCase()]||'•');
+  $('#histBody').innerHTML=runs.map((r,idx)=>{
+    const at=r.action_type||''; const atc=at==='write'?'bad':at==='analysis'?'acc':'ok';
+    const acc=r.acc_score!=null?`<span class="chip acc">acc ${r.acc_score}</span>`:'';
+    const blk=r.blocked?`<span class="chip ok">🛡️ ${r.blocked} blocked</span>`:'';
+    const calls=(r.calls||[]).map(c=>{
+      const code=`${c.blocked?'BLOCKED ':''}${c.verb} ${c.path}`;
+      return `<div class="c"><code class="${c.blocked?'blk':''}">${code}</code> ${c.reason?'↳ '+c.reason:''}</div>`;
+    }).join('') || '<div class="c">(no API calls)</div>';
+    return `<div class="hrun">
+      <div class="top">
+        <span class="src ${r.source}">${(r.source||'').toUpperCase()}</span>
+        <b>${optIcon(r.option)} ${r.option}</b>
+        ${r.task_id?`<span class="chip">${r.task_id}</span>`:''}
+        <span class="chip ${atc}">${at||'?'}</span>
+        ${acc}${blk}
+        <span class="chip">$${r.cost_usd}</span>
+        <span class="chip">${r.latency_s}s</span>
+        <span class="ts">#${r.id} · ${r.ts}</span>
+      </div>
+      <div class="intent">🎯 ${r.intent||'(no intent captured)'}</div>
+      <details><summary style="color:var(--mut);font-size:12px">🔁 Loop trace (${(r.turns||[]).length} turns)</summary>
+        <div class="calls">${loopTrace(r.turns)}</div></details>
+      <details><summary style="color:var(--mut);font-size:12px">📡 API calls & reasons (${(r.calls||[]).length})</summary>
+        <div class="calls">${calls}</div></details>
+      <div class="acts">
+        <button onclick="openHistoryRun(_histRuns[${idx}])">📊 Open monitor</button>
+        <button onclick="togglePin(historyToRun(_histRuns[${idx}])); this.textContent='📌 pinned'">📌 Pin</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('#send').onclick=send;
+input.addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+$('#compareBtn').onclick=compare;
+$('#historyBtn').onclick=openHistory;
+$('#pinBtn').onclick=pinnedCompare;
+
+(async function(){
+  CFG=await (await fetch('/api/options')).json();
+  $('#envBadge').textContent=`model ${CFG.model} · ${CFG.api}`;
+  renderOptions(); updateNextHint();
+  const s=$('#samples'); SAMPLES.forEach(x=>{const sp=el(`<span class="s"><b>${x.tag}:</b> ${x.t}</span>`);
+    sp.onclick=()=>{input.value=x.t; input.focus();}; s.appendChild(sp);});
+  chat.appendChild(el(`<div class="msg"><div class="who">guide</div><div class="bubble">
+    👋 Welcome to <b>TiefBench</b> — a live API-to-Agent bake-off. The same question can be answered five different ways —
+    pick an <b>Option</b> on the left to see how it works, then ask something. The right panel shows the
+    <b>workflow</b> and the <b>real API calls</b> each turn. Hit <b>⚖️ Compare all 5</b> to race them.
+    </div></div>`));
+  renderRight();
+  narrate(meta());
+})();
+</script>
+</body>
+</html>
