@@ -21,6 +21,15 @@ _capture_raw = contextvars.ContextVar("capture_raw", default=False)
 def set_capture_raw(v):
     _capture_raw.set(bool(v))
 
+# Per-request model override (e.g. the chat's model picker); blank -> env default.
+_model = contextvars.ContextVar("model", default=None)
+
+def set_model(m):
+    _model.set(m or None)
+
+def current_model():
+    return _model.get() or MODEL
+
 def emit(event: dict):
     fn = _emitter.get()
     if fn:
@@ -59,11 +68,14 @@ class Tracer:
     tokens_in: int = 0
     tokens_out: int = 0
     api_calls: list[str] = field(default_factory=list)   # e.g. "GET /api/portfolio"
+    model: str | None = None                             # model actually used (for pricing)
 
     def record_llm(self, usage) -> None:
         self.llm_calls += 1
         self.tokens_in += getattr(usage, "input_tokens", 0) or 0
         self.tokens_out += getattr(usage, "output_tokens", 0) or 0
+        if self.model is None:
+            self.model = current_model()
 
     def record_api(self, method: str, path: str, *, blocked: bool = False) -> None:
         prefix = "BLOCKED " if blocked else ""
@@ -81,7 +93,7 @@ class RunResult:
     error: str | None = None
 
     def cost_usd(self) -> float:
-        pin, pout = PRICES.get(MODEL, (3.0, 15.0))
+        pin, pout = PRICES.get(self.tracer.model or MODEL, (3.0, 15.0))
         return self.tracer.tokens_in / 1e6 * pin + self.tracer.tokens_out / 1e6 * pout
 
 
@@ -93,6 +105,15 @@ def _anthropic():
         import anthropic
         _client = anthropic.Anthropic()
     return _client
+
+
+def client_for(api_key: str | None = None):
+    """Client for the given key. A user-supplied key is used transiently (fresh
+    client, never cached/stored/logged); blank falls back to the env key."""
+    if api_key:
+        import anthropic
+        return anthropic.Anthropic(api_key=api_key)
+    return _anthropic()
 
 
 def _jsonable(o):
@@ -137,7 +158,7 @@ def capture_turn(messages, resp, label=None, system=None):
 def llm_call(messages, tracer: Tracer, *, system=SYSTEM_PROMPT, tools=None,
              max_tokens=MAX_TOKENS, label=None):
     """Single Claude call. Records usage. Returns the raw message response."""
-    kwargs = dict(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    kwargs = dict(model=current_model(), max_tokens=max_tokens, system=system, messages=messages)
     if tools:
         kwargs["tools"] = tools
     resp = _anthropic().messages.create(**kwargs)
@@ -150,7 +171,7 @@ def llm_stream(messages, tracer: Tracer, *, system=SYSTEM_PROMPT, tools=None,
                max_tokens=MAX_TOKENS, label=None):
     """Streaming Claude call. Emits {'type':'token'} deltas as text arrives, then
     records usage and returns the final message (with any tool_use blocks)."""
-    kwargs = dict(model=MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    kwargs = dict(model=current_model(), max_tokens=max_tokens, system=system, messages=messages)
     if tools:
         kwargs["tools"] = tools
     with _anthropic().messages.stream(**kwargs) as stream:

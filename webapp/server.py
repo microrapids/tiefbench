@@ -123,6 +123,7 @@ class ChatReq(BaseModel):
     message: str
     grade: bool = False
     raw: bool = False
+    model: str | None = None      # per-request model override; blank = env default
 
 
 @app.get("/api/options")
@@ -155,7 +156,7 @@ def _payload(req: ChatReq, res, mod, key) -> dict:
         "tokens_out": res.tracer.tokens_out,
         "cost_usd": round(res.cost_usd(), 5),
         "latency_s": round(res.latency_ms / 1000, 2),
-        "model": core.MODEL,
+        "model": res.tracer.model or req.model or core.MODEL,
         "accuracy": accuracy,
     }
 
@@ -192,6 +193,7 @@ class TuneReq(BaseModel):
     pack: dict | None = None
     scenarios: list = []          # list of strings or {text, expected}
     edits: dict | None = None     # {tool_name: new_description} for retest
+    samples: int = 1              # N-sample each scenario for stability
 
 
 def _tune_tools(req):
@@ -208,19 +210,52 @@ def tune_analyze(req: TuneReq):
         return {"error": "no tools in pack"}
     if not req.scenarios:
         return {"error": "no scenarios provided"}
-    return tune.analyze(norm, req.scenarios)
+    return tune.analyze(norm, req.scenarios, samples=max(1,min(req.samples,9)))
 
 
 @app.post("/api/tune/retest")
 def tune_retest(req: TuneReq):
     import tune
     norm = _tune_tools(req)
-    return tune.retest(norm, req.edits or {}, req.scenarios)
+    return tune.retest(norm, req.edits or {}, req.scenarios, samples=max(1,min(req.samples,9)))
 
 
 @app.get("/tune")
 def tune_page():
     return FileResponse(os.path.join(STATIC, "tune.html"))
+
+
+class EvalReq(BaseModel):
+    pack: dict | None = None
+    scenarios: list = []
+    models: list = []                # model ids to compare
+    reference: str | None = None     # baseline model id
+    api_key: str | None = None       # optional; blank = server env key (transient, never stored)
+    samples: int = 1                 # N-sample each (model, scenario) for stability
+
+
+@app.get("/api/eval/models")
+def eval_models():
+    import modeleval
+    return {"models": modeleval.AVAILABLE, "default_model": core.MODEL}
+
+
+@app.post("/api/eval")
+def api_eval(req: EvalReq):
+    import modeleval
+    norm = _tune_tools(req)
+    if not norm:
+        return {"error": "no tools in pack"}
+    if not req.scenarios:
+        return {"error": "no scenarios provided"}
+    models = req.models or [core.MODEL]
+    reference = req.reference or models[0]
+    return modeleval.evaluate(norm, req.scenarios, models, reference, api_key=req.api_key or None, samples=max(1,min(req.samples,9)))
+
+
+@app.get("/eval")
+def eval_page():
+    return FileResponse(os.path.join(STATIC, "model-eval.html"))
 
 
 @app.get("/api/history")
@@ -238,6 +273,7 @@ def chat(req: ChatReq):
     if key not in OPTIONS:
         return {"error": f"unknown option '{key}'"}
     mod = _mod(key)
+    core.set_model(req.model)
     res = mod.run(Task(id="chat", level="chat", prompt=req.message))
     return _payload(req, res, mod, key)
 
@@ -258,6 +294,7 @@ def chat_stream(req: ChatReq):
     def worker():
         core.set_emitter(lambda ev: (events.append(ev), q.put(ev)))   # tee: stream + collect
         core.set_capture_raw(req.raw)
+        core.set_model(req.model)
         try:
             try:
                 import intent

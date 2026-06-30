@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TiefBench · Model Eval</title>
+<style>
+  :root{--bg:#0b0e14;--bg2:#0f131c;--panel:#141925;--line:#242c3d;--txt:#e8ebf2;--mut:#8a93a8;
+        --accent:#7aa2ff;--accent2:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;--shadow:0 8px 30px rgba(0,0,0,.35)}
+  *{box-sizing:border-box} body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#16203a 0%,var(--bg) 55%);color:var(--txt);min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);
+    background:rgba(10,13,20,.6);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 12px var(--accent)}
+  .brand small{color:var(--mut);font-weight:500} header .spacer{flex:1}
+  a.lnk,.srcbtn{font-size:13px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 13px;text-decoration:none;cursor:pointer}
+  a.lnk:hover,.srcbtn:hover{border-color:var(--accent)} .srcbtn.active{border-color:var(--accent);color:var(--accent)}
+  main{max-width:1040px;margin:0 auto;padding:22px}
+  h3.sec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:20px 2px 10px}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0f1c;border:none;font-weight:700;padding:10px 16px;border-radius:10px;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:default}
+  textarea{width:100%;min-height:90px;background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:12px;font:inherit;resize:vertical}
+  .models{display:flex;gap:10px;flex-wrap:wrap}
+  .mcard{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px}
+  .mcard input{accent-color:var(--accent)}
+  .ref{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--mut)}
+  select,input[type=password]{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font:inherit}
+  .keyrow{margin-top:10px;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:8px}
+  .reco{display:flex;gap:12px;align-items:center;padding:14px 16px;border-radius:14px;margin:16px 0;box-shadow:var(--shadow);
+    background:linear-gradient(180deg,#13251c,#141a28);border:1px solid #1e5a44}
+  .reco.warn{background:linear-gradient(180deg,#2a1414,#141a28);border-color:#5a2424}
+  .reco .big{font-size:16px;font-weight:800}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:9px 10px;text-align:left}
+  th{background:var(--bg);font-size:12px}
+  td.ref{background:#0d1119;color:var(--mut)}
+  td.diverge{color:var(--amber);font-weight:700}
+  .refcol{color:var(--accent2)}
+  .sum{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .scard{flex:1;min-width:180px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .scard.refc{border-color:var(--accent2)} .scard.rec{box-shadow:0 0 0 1px var(--green)}
+  .scard h4{margin:0 0 6px;font-size:14px} .scard .row{font-size:12px;color:var(--mut);margin:2px 0}
+  .scard .row b{color:var(--txt)}
+  .empty{color:var(--mut);text-align:center;padding:20px}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> TiefBench <small>· Model Eval</small></div>
+  <div class="spacer"></div>
+  <button class="srcbtn active" id="srcBuiltin">TiefStocks pack</button>
+  <label class="srcbtn" for="packFile">Upload pack</label><input type="file" id="packFile" accept=".json">
+  <a class="lnk" href="/tune">🔧 Tune</a><a class="lnk" href="/advisor">🧭 Advisor</a><a class="lnk" href="/">← Bake-off</a>
+</header>
+
+<main>
+  <h3 class="sec">1 · Scenarios (what your users ask) — one per line</h3>
+  <textarea id="scen" placeholder="Show me what I own&#10;Is AMD a buy right now?&#10;Why did my portfolio change today?"></textarea>
+
+  <h3 class="sec">2 · Models to compare</h3>
+  <div class="models" id="models"></div>
+  <div class="ref">Reference (what you tested on): <select id="ref"></select></div>
+  <div class="keyrow">
+    <label>samples/scenario:</label>
+    <select id="samples" style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px">
+      <option value="1">1 (fast)</option><option value="3" selected>3</option><option value="5">5 (stable)</option></select>
+    <span>more samples = tighter confidence, more cost</span>
+  </div>
+  <div class="keyrow">
+    <label>API key (optional):</label>
+    <input type="password" id="apikey" placeholder="leave blank — uses server env key" size="34">
+    <span>key is used for this run only · never stored</span>
+  </div>
+  <div style="margin-top:12px"><button class="btn" id="runBtn">Compare models ▸</button>
+    <span id="costnote" style="color:var(--mut);font-size:12px;margin-left:10px"></span></div>
+
+  <div id="out"></div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+let pack=null, MODELS=[];
+
+$('#srcBuiltin').onclick=()=>{ pack=null; $('#srcBuiltin').classList.add('active'); };
+$('#packFile').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f)return;
+  try{ pack=JSON.parse(await f.text()); $('#srcBuiltin').classList.remove('active'); }catch(err){ alert('Bad JSON: '+err); } });
+
+function scenarios(){ return $('#scen').value.split("\n").map(s=>s.trim()).filter(Boolean).map(t=>({text:t})); }
+function selectedModels(){ return [...document.querySelectorAll('.msel:checked')].map(c=>c.value); }
+function updateCost(){
+  const m=selectedModels().length, s=scenarios().length;
+  $('#costnote').textContent = (m&&s)? `≈ ${m*s} probes (${m} models × ${s} scenarios)` : '';
+}
+
+async function init(){
+  const cfg=await (await fetch('/api/eval/models')).json();
+  MODELS=cfg.models;
+  $('#models').innerHTML=MODELS.map(m=>{
+    const def = (m.id===cfg.default_model || m.id.includes('haiku'));
+    return `<label class="mcard"><input type="checkbox" class="msel" value="${m.id}" ${def?'checked':''}> ${m.label}</label>`;
+  }).join('');
+  $('#ref').innerHTML=MODELS.map(m=>`<option value="${m.id}" ${m.id===cfg.default_model?'selected':''}>${m.label}</option>`).join('');
+  document.querySelectorAll('.msel').forEach(c=>c.onchange=updateCost);
+  $('#scen').addEventListener('input',updateCost);
+  if(!$('#scen').value) $('#scen').value="Show me what I own\nIs AMD a buy right now?\nWhy did my portfolio change today?";
+  updateCost();
+}
+
+async function run(){
+  const scen=scenarios(); if(!scen.length){ alert('Add scenarios'); return; }
+  let models=selectedModels(); if(!models.length){ alert('Pick at least one model'); return; }
+  const reference=$('#ref').value;
+  if(!models.includes(reference)) models=[reference,...models];   // ensure reference is evaluated
+  $('#runBtn').disabled=true; $('#out').innerHTML='<div class="empty">Probing each model across your scenarios…</div>';
+  let d;
+  try{ d=await (await fetch('/api/eval',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({pack,scenarios:scen,models,reference,api_key:$('#apikey').value||null,samples:+$('#samples').value})})).json(); }
+  catch(e){ $('#out').innerHTML='<div class="empty">Error: '+e+'</div>'; $('#runBtn').disabled=false; return; }
+  if(d.error){ $('#out').innerHTML='<div class="empty">'+d.error+'</div>'; $('#runBtn').disabled=false; return; }
+  render(d); $('#runBtn').disabled=false;
+}
+
+function render(d){
+  const order=d.models;
+  const reco = d.recommendation
+    ? `<div class="reco ${d.recommended?'':'warn'}"><div>${d.recommended?'✅':'⚠️'}</div>
+        <div class="big">${d.recommendation}</div></div>` : '';
+  // summary cards
+  const cards=order.map(mid=>{ const s=d.summaries[mid];
+    return `<div class="scard ${s.is_reference?'refc':''} ${mid===d.recommended?'rec':''}">
+      <h4>${s.label} ${s.is_reference?'<span class="refcol">· reference</span>':''} ${mid===d.recommended?'<span style="color:var(--green)">· recommended</span>':''}</h4>
+      ${s.error?`<div class="row" style="color:var(--red)">error: ${s.error}</div>`:`
+      <div class="row">agreement w/ ref: <b>${s.agreement}%</b>${s.agreement_ci?` <span style="color:var(--mut)">(95% CI ${s.agreement_ci[0]}–${s.agreement_ci[1]})</span>`:''}</div>
+      <div class="row">avg stability: <b>${s.avg_stability??'—'}</b>${s.avg_stability!=null&&s.avg_stability<0.7?' <span style="color:var(--amber)">⚠ unstable</span>':''}</div>
+      <div class="row">avg confidence: <b>${s.avg_confidence}</b></div>
+      <div class="row">est cost: <b>${s.est_cost!=null?'$'+s.est_cost:'—'}</b> · ${s.tokens_in}/${s.tokens_out} tok</div>`}
+    </div>`; }).join('');
+  // matrix
+  const head=`<tr><th>Scenario</th>${order.map(mid=>`<th>${d.summaries[mid].label}${mid===d.reference?' ★':''}</th>`).join('')}</tr>`;
+  const rows=d.matrix.map(m=>`<tr><td>${m.scenario}</td>${order.map(mid=>{
+      const cell=m.cells[mid]||{}; const v=cell.chosen||'—'; const isRef=mid===d.reference;
+      const diff=!isRef && v!==m.reference;
+      const stab=(cell.stability!=null && d.samples>1)?` <span style="color:var(--mut)">${Math.round(cell.stability*d.samples)}/${d.samples}</span>`:'';
+      return `<td class="${isRef?'ref':''} ${diff?'diverge':''}">${v}${diff?' ⚠':''}${stab}</td>`;
+    }).join('')}</tr>`).join('');
+  $('#out').innerHTML=`${reco}
+    <h3 class="sec">Per-model summary</h3><div class="sum">${cards}</div>
+    <h3 class="sec">Selection matrix — ${d.divergences} scenario(s) diverge from reference (★)</h3>
+    <table>${head}${rows}</table>
+    <p style="color:var(--mut);font-size:12px;margin-top:8px">⚠ = this model picked a different tool than your reference model — your prod-risk hotspots.</p>`;
+}
+
+$('#runBtn').onclick=run;
+init();
+</script>
+</body>
+</html>

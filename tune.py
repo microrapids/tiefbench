@@ -28,7 +28,7 @@ PROBE_SYS = ("You are an AI agent choosing exactly ONE tool to fulfill a request
              "Choose only from the listed tools. Output ONLY valid JSON.")
 
 
-def probe(tools: list[dict], scenario: str) -> dict:
+def probe(tools: list[dict], scenario: str, model: str | None = None, api_key: str | None = None) -> dict:
     msg = [{"role": "user", "content":
             "TOOLS:\n" + _tools_block(tools) +
             f"\n\nUSER REQUEST: {scenario}\n\n"
@@ -36,14 +36,44 @@ def probe(tools: list[dict], scenario: str) -> dict:
             '"ranked": ["up to 3 tool names, best first"], "confidence": <0..1>, '
             '"why": "<one short clause>", "why_not": "<why not the runner-up>", '
             '"interchangeable": <true if the top choices are basically equivalent for this request>}'}]
-    r = core._anthropic().messages.create(model=core.MODEL, max_tokens=400, system=PROBE_SYS, messages=msg)
+    r = core.client_for(api_key).messages.create(
+        model=model or core.MODEL, max_tokens=400, system=PROBE_SYS, messages=msg)
     txt = "".join(b.text for b in r.content if b.type == "text")
     s, e = txt.find("{"), txt.rfind("}")
     try:
         d = json.loads(txt[s:e + 1])
     except Exception:
         d = {"chosen": None, "ranked": [], "confidence": 0, "why": "", "why_not": "", "interchangeable": False}
+    d["_tokens"] = {"in": getattr(r.usage, "input_tokens", 0) or 0,
+                    "out": getattr(r.usage, "output_tokens", 0) or 0}
     return d
+
+
+def probe_n(tools, scenario, n=1, model=None, api_key=None) -> dict:
+    """Run the selection probe N times → modal tool + behavioral STABILITY
+    (how often it picks the same tool) + distribution. Stability is the honest
+    ambiguity signal: self-reported confidence can rationalize, repeated sampling
+    cannot."""
+    from collections import Counter
+    picks, confs, inter, tin, tout, last = Counter(), [], 0, 0, 0, {}
+    for _ in range(max(1, n)):
+        d = probe(tools, scenario, model=model, api_key=api_key)
+        last = d
+        picks[d.get("chosen")] += 1
+        if d.get("confidence") is not None:
+            confs.append(d["confidence"])
+        if d.get("interchangeable"):
+            inter += 1
+        tk = d.get("_tokens", {})
+        tin += tk.get("in", 0); tout += tk.get("out", 0)
+    total = sum(picks.values()) or 1
+    modal, modal_ct = picks.most_common(1)[0]
+    return {"chosen": modal, "stability": round(modal_ct / total, 2),
+            "distribution": dict(picks), "samples": total,
+            "confidence": round(sum(confs) / len(confs), 2) if confs else None,
+            "interchangeable": inter > total / 2,
+            "ranked": last.get("ranked", []), "why": last.get("why"), "why_not": last.get("why_not"),
+            "_tokens": {"in": tin, "out": tout}}
 
 
 def diagnose(d: dict, expected: str | None = None) -> list[str]:
@@ -52,19 +82,20 @@ def diagnose(d: dict, expected: str | None = None) -> list[str]:
         issues.append("no_tool")
     if (d.get("confidence") or 0) < 0.6:
         issues.append("low_confidence")
-    if d.get("interchangeable"):
+    # behavioral ambiguity: flips tools across samples, or self-reports interchangeable
+    if d.get("interchangeable") or (d.get("stability") is not None and d["stability"] < 0.7):
         issues.append("ambiguous")
     if expected and d.get("chosen") and d["chosen"] != expected:
         issues.append("wrong_tool")
     return issues
 
 
-def _probe_all(tools, scenarios):
+def _probe_all(tools, scenarios, samples=1):
     out = []
     for sc in scenarios:
         text = sc.get("text") if isinstance(sc, dict) else sc
         expected = sc.get("expected") if isinstance(sc, dict) else None
-        d = probe(tools, text)
+        d = probe_n(tools, text, n=samples)
         d["scenario"] = text
         d["expected"] = expected
         d["issues"] = diagnose(d, expected)
@@ -74,14 +105,17 @@ def _probe_all(tools, scenarios):
 
 def summarize(results):
     n = len(results) or 1
+    stab = [r["stability"] for r in results if r.get("stability") is not None]
     return {
         "scenarios": len(results),
+        "samples": (results[0].get("samples") if results else 1),
         "ambiguous": sum(1 for r in results if "ambiguous" in r["issues"]),
         "low_confidence": sum(1 for r in results if "low_confidence" in r["issues"]),
         "no_tool": sum(1 for r in results if "no_tool" in r["issues"]),
         "wrong_tool": sum(1 for r in results if "wrong_tool" in r["issues"]),
         "clean": sum(1 for r in results if not r["issues"]),
         "avg_confidence": round(sum((r.get("confidence") or 0) for r in results) / n, 2),
+        "avg_stability": round(sum(stab) / len(stab), 2) if stab else None,
     }
 
 
@@ -120,8 +154,8 @@ def suggest(tools, results):
         return []
 
 
-def analyze(tools, scenarios):
-    results = _probe_all(tools, scenarios)
+def analyze(tools, scenarios, samples=1):
+    results = _probe_all(tools, scenarios, samples=samples)
     return {"results": results, "summary": summarize(results),
             "suggestions": suggest(tools, results),
             "tools": [{"name": t["name"], "description": t.get("description", "")} for t in tools]}
@@ -137,7 +171,7 @@ def apply_edits(tools, edits: dict):
     return out
 
 
-def retest(tools, edits, scenarios):
+def retest(tools, edits, scenarios, samples=1):
     new_tools = apply_edits(tools, edits or {})
-    results = _probe_all(new_tools, scenarios)
+    results = _probe_all(new_tools, scenarios, samples=samples)
     return {"results": results, "summary": summarize(results)}

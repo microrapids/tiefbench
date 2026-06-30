@@ -7,7 +7,7 @@ server-side. The API trace is reconstructed from tool calls for scoring parity.
 """
 from __future__ import annotations
 import os, sys, json, asyncio
-from core import RunResult, Tracer, timed, SYSTEM_PROMPT, MODEL, MAX_TOKENS, emit, capture_turn
+from core import RunResult, Tracer, timed, SYSTEM_PROMPT, MAX_TOKENS, emit, capture_turn, current_model
 from tools import to_json
 
 NAME = "C:mcp"
@@ -57,7 +57,7 @@ async def _run_async(task) -> RunResult:
             for _ in range(MAX_TURNS):
                 # NOTE: aclient is the SYNC Anthropic client, so its stream() is a
                 # sync context manager — use plain `with`/`for` inside the coroutine.
-                with aclient.messages.stream(model=MODEL, max_tokens=MAX_TOKENS,
+                with aclient.messages.stream(model=current_model(), max_tokens=MAX_TOKENS,
                                              system=SYSTEM_PROMPT, messages=messages,
                                              tools=tools) as stream:
                     for delta in stream.text_stream:

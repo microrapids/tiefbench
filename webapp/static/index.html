@@ -29,6 +29,7 @@
   .badge{font-size:12px; color:var(--mut); background:var(--panel); border:1px solid var(--line);
          padding:5px 10px; border-radius:20px}
   .toggle{display:flex; align-items:center; gap:7px; color:var(--mut); font-size:12px; cursor:pointer}
+  #modelSel{background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:5px 8px; font:inherit}
   .btn{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0a0f1c; border:none;
        font-weight:700; padding:9px 14px; border-radius:10px; cursor:pointer; font-size:13px}
   .btn.ghost{background:var(--panel); color:var(--txt); border:1px solid var(--line); font-weight:600}
@@ -226,10 +227,12 @@
   <div class="brand"><span class="dot"></span> TiefBench <small>· API-to-Agent POC</small></div>
   <div class="spacer"></div>
   <span class="badge" id="envBadge">…</span>
+  <label class="toggle">model <select id="modelSel"></select></label>
   <label class="toggle"><input type="checkbox" id="grade"> grade accuracy</label>
   <label class="toggle"><input type="checkbox" id="raw"> show raw</label>
   <a class="btn ghost" href="/advisor" style="text-decoration:none">🧭 Fit Advisor</a>
   <a class="btn ghost" href="/tune" style="text-decoration:none">🔧 Tune MCP</a>
+  <a class="btn ghost" href="/eval" style="text-decoration:none">🧪 Model Eval</a>
   <button class="btn ghost" id="historyBtn">🕘 History</button>
   <button class="btn ghost" id="pinBtn">📌 Pinned (0)</button>
   <button class="btn ghost" id="compareBtn">⚖️ Compare all 5</button>
@@ -487,7 +490,7 @@ function addUser(t){chat.appendChild(el(`<div class="msg user"><div class="who">
 
 async function call(option,message){
   const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({option,message,grade:$('#grade').checked})});
+    body:JSON.stringify({option,message,grade:$('#grade').checked,model:$('#modelSel').value})});
   return r.json();
 }
 
@@ -677,7 +680,7 @@ async function send(){
   let answer='', started=false, pendingReason=null, turnN=0;
   try{
     const resp=await fetch('/api/chat_stream',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({option:current,message:text,grade:$('#grade').checked,raw:$('#raw').checked})});
+      body:JSON.stringify({option:current,message:text,grade:$('#grade').checked,raw:$('#raw').checked,model:$('#modelSel').value})});
     const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
     while(true){
       const {value,done}=await reader.read(); if(done) break;
@@ -860,7 +863,10 @@ $('#pinBtn').onclick=pinnedCompare;
 
 (async function(){
   CFG=await (await fetch('/api/options')).json();
-  $('#envBadge').textContent=`model ${CFG.model} · ${CFG.api}`;
+  $('#envBadge').textContent=CFG.api;
+  try{ const mc=await (await fetch('/api/eval/models')).json();
+    $('#modelSel').innerHTML=mc.models.map(m=>`<option value="${m.id}" ${m.id===CFG.model?'selected':''}>${m.label}</option>`).join('');
+  }catch(e){ $('#modelSel').innerHTML=`<option>${CFG.model}</option>`; }
   renderOptions(); updateNextHint();
   const s=$('#samples'); SAMPLES.forEach(x=>{const sp=el(`<span class="s"><b>${x.tag}:</b> ${x.t}</span>`);
     sp.onclick=()=>{input.value=x.t; input.focus();}; s.appendChild(sp);});

@@ -64,8 +64,13 @@
 Show me what I own
 Is AMD a buy right now?
 What changed in my portfolio today?"></textarea>
-  <div style="margin-top:10px"><button class="btn ghost" id="sampleBtn">Use sample scenarios</button>
-    <button class="btn" id="analyzeBtn">Analyze selection ▸</button></div>
+  <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <button class="btn ghost" id="sampleBtn">Use sample scenarios</button>
+    <label style="color:var(--mut);font-size:13px">samples/scenario
+      <select id="samples" style="background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 8px">
+        <option value="1">1 (fast)</option><option value="3" selected>3</option><option value="5">5 (stable)</option></select></label>
+    <button class="btn" id="analyzeBtn">Analyze selection ▸</button>
+    <span style="color:var(--mut);font-size:12px">more samples = less noise, more cost</span></div>
 
   <div id="before"></div>
   <div id="suggestions"></div>
@@ -85,15 +90,21 @@ $('#packFile').addEventListener('change',async e=>{ const f=e.target.files[0]; i
 function scenarios(){ return $('#scen').value.split("\n").map(s=>s.trim()).filter(Boolean).map(t=>({text:t})); }
 function issuesHtml(iss){ return iss.length? iss.map(i=>`<span class="iss ${i}">${i.replace('_',' ')}</span>`).join('') : '<span class="ok-pill">✓ clean</span>'; }
 function sumChips(s){ return `
-  <span class="chip"><b>${s.scenarios}</b> scenarios</span>
+  <span class="chip"><b>${s.scenarios}</b> scenarios${s.samples>1?` ×${s.samples}`:''}</span>
   <span class="chip ${s.ambiguous?'bad':''}"><b>${s.ambiguous}</b> ambiguous</span>
   <span class="chip ${s.low_confidence?'bad':''}"><b>${s.low_confidence}</b> low-confidence</span>
   <span class="chip ${s.no_tool?'bad':''}"><b>${s.no_tool}</b> no-tool</span>
   <span class="chip ${s.clean===s.scenarios?'ok':''}"><b>${s.clean}</b> clean</span>
+  ${s.avg_stability!=null?`<span class="chip ${s.avg_stability<0.7?'bad':'ok'}"><b>${s.avg_stability}</b> avg stability</span>`:''}
   <span class="chip"><b>${s.avg_confidence}</b> avg confidence</span>`; }
+function stabCell(r){
+  if(r.stability==null||r.samples<=1) return '';
+  const c=r.stability>=0.8?'var(--green)':r.stability>=0.6?'var(--amber)':'var(--red)';
+  return `<span style="color:${c}">${Math.round(r.stability*r.samples)}/${r.samples}</span>`;
+}
 function resTable(results){
-  return `<table><thead><tr><th>Scenario</th><th>Chosen tool</th><th>Conf</th><th>Issues</th><th>Why</th></tr></thead><tbody>`+
-   results.map(r=>`<tr><td>${r.scenario}</td><td><b>${r.chosen||'—'}</b></td><td>${r.confidence}</td>
+  return `<table><thead><tr><th>Scenario</th><th>Chosen tool</th><th>Stability</th><th>Conf</th><th>Issues</th><th>Why</th></tr></thead><tbody>`+
+   results.map(r=>`<tr><td>${r.scenario}</td><td><b>${r.chosen||'—'}</b></td><td>${stabCell(r)}</td><td>${r.confidence}</td>
      <td>${issuesHtml(r.issues)}</td><td style="color:var(--mut)">${r.why||''}</td></tr>`).join('')+`</tbody></table>`;
 }
 
@@ -103,7 +114,7 @@ async function analyze(){
   $('#analyzeBtn').disabled=true; $('#before').innerHTML='<div class="empty">Probing tool selection…</div>';
   $('#suggestions').innerHTML=''; $('#after').innerHTML='';
   let d;
-  try{ d=await (await fetch('/api/tune/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack,scenarios:scen})})).json(); }
+  try{ d=await (await fetch('/api/tune/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack,scenarios:scen,samples:+$('#samples').value})})).json(); }
   catch(e){ $('#before').innerHTML='<div class="empty">Error: '+e+'</div>'; $('#analyzeBtn').disabled=false; return; }
   if(d.error){ $('#before').innerHTML='<div class="empty">'+d.error+'</div>'; $('#analyzeBtn').disabled=false; return; }
   lastTools=d.tools||[];
@@ -140,7 +151,7 @@ async function retest(){
   $('#retestBtn').disabled=true; $('#after').innerHTML='<div class="empty">Re-testing with approved descriptions…</div>';
   const before=window._beforeSummary;
   let d;
-  try{ d=await (await fetch('/api/tune/retest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack,edits,scenarios:lastScen})})).json(); }
+  try{ d=await (await fetch('/api/tune/retest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack,edits,scenarios:lastScen,samples:+$('#samples').value})})).json(); }
   catch(e){ $('#after').innerHTML='<div class="empty">Error: '+e+'</div>'; return; }
   const s=d.summary, b=before||{};
   const delta=(k,better='down')=>{ if(b[k]==null) return ''; const d2=s[k]-b[k];
@@ -153,6 +164,7 @@ async function retest(){
     <div class="chips" style="margin-top:10px">
       <span class="chip">ambiguous ${b.ambiguous??'?'} → <b>${s.ambiguous}</b>${delta('ambiguous')}</span>
       <span class="chip">low-conf ${b.low_confidence??'?'} → <b>${s.low_confidence}</b>${delta('low_confidence')}</span>
+      ${s.avg_stability!=null?`<span class="chip">avg stability ${b.avg_stability??'?'} → <b>${s.avg_stability}</b>${delta('avg_stability','up')}</span>`:''}
       <span class="chip">avg confidence ${b.avg_confidence??'?'} → <b>${s.avg_confidence}</b>${delta('avg_confidence','up')}</span>
     </div>
     ${resTable(d.results)}`;
