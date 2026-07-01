@@ -225,6 +225,7 @@
 <body>
 <header>
   <div class="brand"><span class="dot"></span> TiefBench <small>· API-to-Agent POC</small></div>
+  <button class="btn ghost" id="newSessionBtn" style="text-decoration:none">＋ New chat</button>
   <div class="spacer"></div>
   <span class="badge" id="envBadge">…</span>
   <label class="toggle">model <select id="modelSel"></select></label>
@@ -233,6 +234,7 @@
   <a class="btn ghost" href="/advisor" style="text-decoration:none">🧭 Fit Advisor</a>
   <a class="btn ghost" href="/tune" style="text-decoration:none">🔧 Tune MCP</a>
   <a class="btn ghost" href="/eval" style="text-decoration:none">🧪 Model Eval</a>
+  <a class="btn ghost" href="/validate" style="text-decoration:none">🔬 Validate</a>
   <button class="btn ghost" id="historyBtn">🕘 History</button>
   <button class="btn ghost" id="pinBtn">📌 Pinned (0)</button>
   <button class="btn ghost" id="compareBtn">⚖️ Compare all 5</button>
@@ -855,7 +857,22 @@ async function openHistory(){
   }).join('');
 }
 
+function welcome(){
+  chat.appendChild(el(`<div class="msg"><div class="who">guide</div><div class="bubble">
+    👋 Welcome to <b>TiefBench</b> — a live API-to-Agent bake-off. The same question can be answered five different ways —
+    pick an <b>Option</b> on the left to see how it works, then ask something. The right panel shows the
+    <b>workflow</b> and the <b>real API calls</b> each turn. Hit <b>⚖️ Compare all 5</b> to race them.
+    </div></div>`));
+}
+function newSession(){
+  // clears the visible transcript only — History (DB) and Pinned runs are kept
+  chat.innerHTML=''; activeRun=null;
+  welcome(); renderRight(); updateNudge();
+  input.value=''; input.focus();
+}
+
 $('#send').onclick=send;
+$('#newSessionBtn').onclick=newSession;
 input.addEventListener('keydown',e=>{if(e.key==='Enter')send();});
 $('#compareBtn').onclick=compare;
 $('#historyBtn').onclick=openHistory;
@@ -870,11 +887,7 @@ $('#pinBtn').onclick=pinnedCompare;
   renderOptions(); updateNextHint();
   const s=$('#samples'); SAMPLES.forEach(x=>{const sp=el(`<span class="s"><b>${x.tag}:</b> ${x.t}</span>`);
     sp.onclick=()=>{input.value=x.t; input.focus();}; s.appendChild(sp);});
-  chat.appendChild(el(`<div class="msg"><div class="who">guide</div><div class="bubble">
-    👋 Welcome to <b>TiefBench</b> — a live API-to-Agent bake-off. The same question can be answered five different ways —
-    pick an <b>Option</b> on the left to see how it works, then ask something. The right panel shows the
-    <b>workflow</b> and the <b>real API calls</b> each turn. Hit <b>⚖️ Compare all 5</b> to race them.
-    </div></div>`));
+  welcome();
   renderRight();
   narrate(meta());
   loadFit();

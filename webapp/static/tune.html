@@ -40,6 +40,15 @@
   .sug .rat{color:var(--accent2);font-size:12px;margin-top:6px}
   .sug label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-top:8px}
   .empty{color:var(--mut);text-align:center;padding:20px}
+  .tabs{display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--mut);font:inherit;
+       font-weight:600;padding:10px 6px;cursor:pointer} .tab small{font-weight:400;opacity:.7}
+  .tab.active{color:var(--txt);border-bottom-color:var(--accent)}
+  .big2{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+  .bcard{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .bcard .n{font-size:28px;font-weight:800} .bcard .l{color:var(--mut);font-size:12px}
+  .save{color:var(--green);font-weight:800}
+  .sizes{font-size:12px;color:var(--mut);margin-top:6px}
   .change{font-size:11px} .change .arrow{color:var(--mut)}
   input[type=file]{display:none}
   .ba{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px}
@@ -59,6 +68,12 @@
 </header>
 
 <main>
+  <div class="tabs">
+    <button class="tab active" id="tabDesc">🏷️ Tune descriptions <small>(tool selection)</small></button>
+    <button class="tab" id="tabRes">✂️ Tune results <small>(loop cost)</small></button>
+  </div>
+
+  <div id="descMode">
   <h3 class="sec">1 · Real scenarios (what your users will ask) — one per line</h3>
   <textarea id="scen" placeholder="e.g.
 Show me what I own
@@ -75,6 +90,21 @@ What changed in my portfolio today?"></textarea>
   <div id="before"></div>
   <div id="suggestions"></div>
   <div id="after"></div>
+  </div>
+
+  <div id="resMode" style="display:none">
+    <p class="intro" style="color:var(--mut);font-size:13px;max-width:760px">Verbose tool results get re-fed into context every loop turn, so they dominate multi-step cost.
+    Run one multi-step scenario, let AI draft a <b>field projection</b> per tool (keep only what's needed — a config transform, no API change), approve it, and see the <b>loop-token cut</b> with the answer preserved.</p>
+    <h3 class="sec">1 · One multi-step scenario</h3>
+    <input id="rscen" style="width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:12px;font:inherit"
+      placeholder="e.g. Give me a full read on AMD: the analysis, my thesis, and the bear case.">
+    <div style="margin-top:10px"><button class="btn ghost" id="rSampleBtn">Use sample</button>
+      <button class="btn" id="rAnalyzeBtn">Run baseline loop ▸</button>
+      <span style="color:var(--mut);font-size:12px;margin-left:8px">runs the real multi-turn agent against TiefStocks</span></div>
+    <div id="rbefore"></div>
+    <div id="rsug"></div>
+    <div id="rafter"></div>
+  </div>
 </main>
 
 <script>
@@ -181,6 +211,72 @@ function exportConfig(){
 function applyToPack(p,edits){ const c=JSON.parse(JSON.stringify(p)); (c.tools||[]).forEach(t=>{ if(edits[t.name]) t.description=edits[t.name]; }); return c; }
 
 $('#analyzeBtn').onclick=analyze;
+
+// ---------- Tune v2: result-projection tuning ----------
+$('#tabDesc').onclick=()=>{ $('#tabDesc').classList.add('active'); $('#tabRes').classList.remove('active'); $('#descMode').style.display=''; $('#resMode').style.display='none'; };
+$('#tabRes').onclick=()=>{ $('#tabRes').classList.add('active'); $('#tabDesc').classList.remove('active'); $('#resMode').style.display=''; $('#descMode').style.display='none'; };
+$('#rSampleBtn').onclick=()=>{ $('#rscen').value="Give me a full read on AMD: the analysis, my thesis, and the bear case."; };
+
+let rBaseline=null;
+function accBadge(a){ return a!=null?`<span class="chip ${a>=85?'ok':'bad'}">accuracy ${a}</span>`:''; }
+function sizeLine(sizes){ return Object.entries(sizes).map(([n,s])=>`${n}: ${s.full}${s.proj!=null?`→${s.proj}`:''}`).join(' · '); }
+
+async function rAnalyze(){
+  const sc=$('#rscen').value.trim(); if(!sc){ alert('Enter a scenario'); return; }
+  $('#rAnalyzeBtn').disabled=true; $('#rbefore').innerHTML='<div class="empty">Running the real multi-turn agent (full results)…</div>'; $('#rsug').innerHTML=''; $('#rafter').innerHTML='';
+  let d;
+  try{ d=await (await fetch('/api/tune/results/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:sc,model:null})})).json(); }
+  catch(e){ $('#rbefore').innerHTML='<div class="empty">Error: '+e+'</div>'; $('#rAnalyzeBtn').disabled=false; return; }
+  if(d.error){ $('#rbefore').innerHTML='<div class="empty">'+d.error+'</div>'; $('#rAnalyzeBtn').disabled=false; return; }
+  rBaseline=d.baseline;
+  $('#rbefore').innerHTML=`<h3 class="sec">2 · Baseline (full results)</h3>
+    <div class="big2">
+      <div class="bcard"><div class="n">${rBaseline.input_tokens.toLocaleString()}</div><div class="l">input tokens across the loop (${rBaseline.turns} turns)</div></div>
+      <div class="bcard"><div class="n">${rBaseline.tools.length}</div><div class="l">tool calls: ${rBaseline.tools.join(', ')}</div></div>
+      <div class="bcard"><div class="n">${accBadge(rBaseline.acc)||'—'}</div><div class="l">answer accuracy (LLM judge)</div></div>
+    </div>
+    <div class="sizes">result sizes (chars): ${sizeLine(rBaseline.sizes)}</div>`;
+  renderRSug(d.suggestions||[]);
+  $('#rAnalyzeBtn').disabled=false;
+}
+function renderRSug(sugs){
+  if(!sugs.length){ $('#rsug').innerHTML='<h3 class="sec">3 · Projections</h3><div class="empty">No trimming suggested — results already lean.</div>'; return; }
+  $('#rsug').innerHTML=`<h3 class="sec">3 · AI-drafted field projections — review &amp; approve</h3>`+
+   sugs.map((s,i)=>`<div class="sug">
+     <h4>✂️ ${s.tool} <span style="color:var(--mut);font-weight:400;font-size:12px">keep only these fields</span></h4>
+     <textarea data-tool="${s.tool}" id="rk${i}">${(s.keep||[]).join(', ')}</textarea>
+     <div class="rat">why safe: ${s.rationale||''}</div>
+     <label><input type="checkbox" class="rapprove" data-tool="${s.tool}" data-edit="rk${i}" checked> Apply this projection</label>
+   </div>`).join('')+
+   `<div style="margin-top:8px"><button class="btn" id="rRetestBtn">Re-test with projections ▸</button></div>`;
+  $('#rRetestBtn').onclick=rRetest;
+}
+function rProjections(){
+  const p={};
+  document.querySelectorAll('.rapprove').forEach(cb=>{ if(cb.checked){ const ta=document.getElementById(cb.dataset.edit);
+    p[cb.dataset.tool]=ta.value.split(',').map(x=>x.trim()).filter(Boolean); } });
+  return p;
+}
+async function rRetest(){
+  const sc=$('#rscen').value.trim(); const proj=rProjections();
+  if(!Object.keys(proj).length){ alert('Approve at least one projection'); return; }
+  $('#rRetestBtn').disabled=true; $('#rafter').innerHTML='<div class="empty">Re-running the loop with projected results…</div>';
+  let d;
+  try{ d=await (await fetch('/api/tune/results/retest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:sc,projections:proj,model:null})})).json(); }
+  catch(e){ $('#rafter').innerHTML='<div class="empty">Error: '+e+'</div>'; return; }
+  const a=d.after, b=rBaseline;
+  const cut=b.input_tokens?Math.round(100*(1-a.input_tokens/b.input_tokens)):0;
+  const accHeld=(b.acc==null||a.acc==null)?'':(a.acc>=b.acc-5?`<span class="chip ok">✓ answer preserved (${b.acc}→${a.acc})</span>`:`<span class="chip bad">⚠ accuracy dropped ${b.acc}→${a.acc} — projection too aggressive</span>`);
+  $('#rafter').innerHTML=`<h3 class="sec">4 · After — loop-cost proof</h3>
+    <div class="big2">
+      <div class="bcard"><div class="n save">−${cut}%</div><div class="l">input tokens: ${b.input_tokens.toLocaleString()} → ${a.input_tokens.toLocaleString()}</div></div>
+      <div class="bcard"><div class="n">${accHeld||accBadge(a.acc)}</div><div class="l">answer correctness held?</div></div>
+    </div>
+    <div class="sizes">result sizes (full→projected): ${sizeLine(a.sizes)}</div>
+    <p style="color:var(--mut);font-size:12px;margin-top:8px">Bigger loops (more turns) save more — results are re-fed every turn. Export this projection into your MCP proxy/gateway config.</p>`;
+  $('#rRetestBtn').disabled=false;
+}
+$('#rAnalyzeBtn').onclick=rAnalyze;
 </script>
 </body>
 </html>

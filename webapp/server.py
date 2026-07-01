@@ -225,6 +225,29 @@ def tune_page():
     return FileResponse(os.path.join(STATIC, "tune.html"))
 
 
+class ResultsTuneReq(BaseModel):
+    scenario: str = ""
+    projections: dict | None = None    # {tool: [keep field paths]}
+    model: str | None = None
+    api_key: str | None = None
+
+
+@app.post("/api/tune/results/analyze")
+def tune_results_analyze(req: ResultsTuneReq):
+    import tune_results
+    if not req.scenario.strip():
+        return {"error": "no scenario provided"}
+    core.set_model(req.model)
+    return tune_results.analyze(req.scenario, model=req.model, api_key=req.api_key or None)
+
+
+@app.post("/api/tune/results/retest")
+def tune_results_retest(req: ResultsTuneReq):
+    import tune_results
+    core.set_model(req.model)
+    return tune_results.retest(req.scenario, req.projections or {}, model=req.model, api_key=req.api_key or None)
+
+
 class EvalReq(BaseModel):
     pack: dict | None = None
     scenarios: list = []
@@ -256,6 +279,35 @@ def api_eval(req: EvalReq):
 @app.get("/eval")
 def eval_page():
     return FileResponse(os.path.join(STATIC, "model-eval.html"))
+
+
+class ValidateReq(BaseModel):
+    models: list = []
+    probe_samples: int = 3
+    exec_samples: int = 1
+    api_key: str | None = None
+    scenarios: list | None = None     # optional override; default = built-in tagged set
+
+
+@app.post("/api/validate")
+def api_validate(req: ValidateReq):
+    import validate as V
+    models = req.models or [core.MODEL]
+    return V.validate(scenarios=req.scenarios, models=models,
+                      probe_samples=max(1, min(req.probe_samples, 7)),
+                      exec_samples=max(1, min(req.exec_samples, 3)),
+                      api_key=req.api_key or None)
+
+
+@app.get("/api/validate/scenarios")
+def validate_scenarios():
+    import validate as V
+    return {"scenarios": [{"text": t, "tag": g} for t, g in V.SCENARIOS]}
+
+
+@app.get("/validate")
+def validate_page():
+    return FileResponse(os.path.join(STATIC, "validate.html"))
 
 
 @app.get("/api/history")

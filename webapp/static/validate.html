@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TiefBench · Probe Validation</title>
+<style>
+  :root{--bg:#0b0e14;--bg2:#0f131c;--panel:#141925;--line:#242c3d;--txt:#e8ebf2;--mut:#8a93a8;
+        --accent:#7aa2ff;--accent2:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;--shadow:0 8px 30px rgba(0,0,0,.35)}
+  *{box-sizing:border-box} body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#16203a 0%,var(--bg) 55%);color:var(--txt);min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);
+    background:rgba(10,13,20,.6);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 12px var(--accent)}
+  .brand small{color:var(--mut);font-weight:500} header .spacer{flex:1}
+  a.lnk{font-size:13px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 13px;text-decoration:none}
+  a.lnk:hover{border-color:var(--accent)}
+  main{max-width:1040px;margin:0 auto;padding:22px}
+  h3.sec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:18px 2px 10px}
+  .intro{color:var(--mut);font-size:13px;max-width:760px}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0f1c;border:none;font-weight:700;padding:10px 16px;border-radius:10px;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:default}
+  .ctl{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  .mcard{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px}
+  select,input[type=password]{background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:8px 10px;font:inherit}
+  .score{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+  .scard{flex:1;min-width:240px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+  .scard .big{font-size:34px;font-weight:800}
+  .scard .big.green{color:var(--green)} .scard .big.amber{color:var(--amber)} .scard .big.red{color:var(--red)}
+  .scard .row{font-size:13px;color:var(--mut);margin-top:4px} .scard .row b{color:var(--txt)}
+  .verdict{margin-top:8px;font-size:13px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .tag{font-size:10px;font-weight:700;border-radius:6px;padding:2px 7px}
+  .tag.single{background:#0e2a20;color:var(--green)} .tag.multi{background:#2a230e;color:var(--amber)}
+  .m{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .yes{color:var(--green)} .partial{color:var(--amber)} .no{color:var(--red)}
+  .empty{color:var(--mut);text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> TiefBench <small>· Probe Validation</small></div>
+  <div class="spacer"></div>
+  <a class="lnk" href="/tune">🔧 Tune</a><a class="lnk" href="/eval">🧪 Eval</a><a class="lnk" href="/">← Bake-off</a>
+</header>
+
+<main>
+  <p class="intro">Does the quick <b>probe</b> (used by Tune &amp; Model Eval) predict what the <b>real agent</b> actually does?
+  We ask the probe which tool it would pick, then run the real agent and watch which tools it actually calls.
+  <b>Predicts first tool</b> = probe matched the agent's first call (exact). <b>Right tool used</b> = the probe's tool showed up
+  somewhere in the agent's run (fairer for multi-step questions, where the agent gathers basics first).</p>
+
+  <h3 class="sec">Models</h3>
+  <div class="ctl" id="models"></div>
+  <div class="ctl">
+    <label class="mcard">probe tries <select id="ps"><option>1</option><option selected>3</option><option>5</option></select></label>
+    <label class="mcard">agent runs <select id="es"><option selected>1</option><option>2</option></select></label>
+    <label class="mcard">API key <input type="password" id="apikey" placeholder="blank = env key" size="22"></label>
+    <button class="btn" id="runBtn">Run validation ▸</button>
+    <span id="note" style="color:var(--mut);font-size:12px"></span>
+  </div>
+
+  <div id="out"></div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+let MODELS=[], NSCEN=14;
+async function init(){
+  const cfg=await (await fetch('/api/eval/models')).json();
+  MODELS=cfg.models;
+  $('#models').innerHTML=MODELS.map(m=>`<label class="mcard"><input type="checkbox" class="msel" value="${m.id}" ${m.id===cfg.default_model?'checked':''}> ${m.label}</label>`).join('');
+  try{ const s=await (await fetch('/api/validate/scenarios')).json(); NSCEN=s.scenarios.length; }catch(e){}
+  upd();
+  document.querySelectorAll('.msel').forEach(c=>c.onchange=upd);
+  $('#ps').onchange=upd; $('#es').onchange=upd;
+}
+function sel(){ return [...document.querySelectorAll('.msel:checked')].map(c=>c.value); }
+function upd(){ const m=sel().length||1, p=+$('#ps').value, e=+$('#es').value;
+  $('#note').textContent=`≈ ${m*NSCEN*(p+e*2)} calls (${NSCEN} scenarios × ${m} model(s); exec is multi-turn)`; }
+
+async function run(){
+  const models=sel(); if(!models.length){ alert('Pick a model'); return; }
+  $('#runBtn').disabled=true; $('#out').innerHTML='<div class="empty">Probing + executing each scenario… (multi-turn, takes a bit)</div>';
+  let d;
+  try{ d=await (await fetch('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({models,probe_samples:+$('#ps').value,exec_samples:+$('#es').value,api_key:$('#apikey').value||null})})).json(); }
+  catch(e){ $('#out').innerHTML='<div class="empty">Error: '+e+'</div>'; $('#runBtn').disabled=false; return; }
+  render(d); $('#runBtn').disabled=false;
+}
+
+function band(v){ return v>=80?'green':v>=60?'amber':'red'; }
+function render(d){
+  let html=`<h3 class="sec">How well the probe predicts the real agent (${d.scenarios} questions · probe×${d.probe_samples} · agent×${d.exec_samples})</h3><div class="score">`;
+  for(const mid of d.models){ const r=d.results[mid]; if(!r) continue;
+    if(r.error){ html+=`<div class="scard"><h4>${r.label}</h4><div class="row" style="color:var(--red)">${r.error}</div></div>`; continue; }
+    const v=r.transfer_score;
+    html+=`<div class="scard">
+      <div>${r.label}</div>
+      <div class="big ${band(v)}">${v}%</div>
+      <div class="row"><b>Predicts first tool</b> (exact) · 95% range <b>${r.transfer_ci[0]}–${r.transfer_ci[1]}%</b></div>
+      <div class="row">Right tool used (anytime): <b>${r.set_coverage}%</b></div>
+      <div class="row">Simple questions: <b>${r.by_tag.single}%</b> · Multi-step questions: <b>${r.by_tag.multi}%</b></div>
+      <div class="verdict ${band(v)==='green'?'yes':band(v)==='amber'?'partial':'no'}">${v>=80?'✓ Probe is reliable — Tune/Eval predictions hold':v>=60?'~ Reliable on simple questions; on multi-step it picks the right tool but not always first':'✗ Probe often misses — verify against the real agent'}</div>
+    </div>`;
+  }
+  html+='</div>';
+  // detail table for the first model
+  const mid=d.models[0], r=d.results[mid];
+  if(r && !r.error){
+    html+=`<h3 class="sec">Per-question — ${r.label}</h3><table><thead><tr><th>Question</th><th>Type</th><th>Probe predicted</th><th>Agent called first</th><th>Agent's full sequence</th><th>Result</th></tr></thead><tbody>`;
+    html+=r.rows.map(row=>{
+      const cls=row.first_match?'yes':(row.set_match?'partial':'no');
+      const mark=row.first_match?'✓ exact':(row.set_match?'~ right tool, later':'✗ not used');
+      return `<tr><td>${row.scenario}</td><td><span class="tag ${row.tag}">${row.tag==='single'?'simple':'multi-step'}</span></td>
+        <td class="m">${row.probe||'—'}</td><td class="m">${row.exec_first||'—'}</td>
+        <td class="m" style="color:var(--mut)">${(row.exec_tools||[]).join(' → ')||'—'}</td>
+        <td class="${cls}">${mark}</td></tr>`;
+    }).join('');
+    html+='</tbody></table><p style="color:var(--mut);font-size:12px;margin-top:8px"><b>✓ exact</b> = probe matched the agent\'s first call · <b>~ right tool, later</b> = probe\'s tool was used, just not first · <b>✗ not used</b> = agent never used it. Multi-step questions naturally show more "~".</p>';
+  }
+  $('#out').innerHTML=html;
+}
+$('#runBtn').onclick=run;
+init();
+</script>
+</body>
+</html>
