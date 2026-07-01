@@ -41,8 +41,19 @@ def normalize(pack: dict) -> list[dict]:
                 risk = "read"
             else:
                 risk = "read" if method == "GET" else "write"
+        # bindings: normalize to {param: "path"|"query"|"body"} for the generic dispatcher
+        bindings = {}
+        pb = http.get("paramBindings")
+        if isinstance(pb, dict):
+            bindings = dict(pb)
+        elif isinstance(t.get("bindings"), dict):
+            for loc, names in t["bindings"].items():
+                for nm in (names or []):
+                    bindings[nm] = loc
+        content_type = http.get("contentType") or (t.get("execution") or {}).get("contentType")
         out.append({"name": t.get("name", "?"), "description": t.get("description", ""),
-                    "schema": schema, "method": method, "path": path, "risk": risk})
+                    "schema": schema, "method": method, "path": path, "risk": risk,
+                    "bindings": bindings, "content_type": content_type})
     return out
 
 

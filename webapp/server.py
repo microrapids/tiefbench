@@ -115,6 +115,16 @@ def _mod(key):
         _mods[key] = importlib.import_module(OPTIONS[key][0])
     return _mods[key]
 
+
+def _runner(key):
+    """Pick the runner: the TiefStocks option for the built-in pack, else the
+    generic pack runner (imported packs execute via function-calling)."""
+    import packs
+    if packs.get_active_id() != "builtin":
+        import packrun
+        return packrun
+    return _mod(key)
+
 app = FastAPI(title="TiefBench Chat")
 
 
@@ -169,13 +179,13 @@ class FitReq(BaseModel):
 @app.post("/api/fit")
 def api_fit(req: FitReq):
     import fit
-    import tools as T
-    norm = fit.normalize(req.pack) if req.pack else fit.from_builtin(T.TOOLS, T.WRITE_TOOLS)
+    import packs
+    norm = fit.normalize(req.pack) if req.pack else packs.active_tools()
     if not norm:
         return {"error": "no tools found in pack"}
-    # calibrate from real runs only for the built-in pack (that's what was measured)
+    # calibration is only valid for the built-in pack (that's what the runs measured)
     calib = None
-    if not req.pack:
+    if not req.pack and packs.get_active_id() == "builtin":
         try:
             import store
             calib = store.calibration(core.MODEL)
@@ -198,8 +208,121 @@ class TuneReq(BaseModel):
 
 def _tune_tools(req):
     import fit
-    import tools as T
-    return fit.normalize(req.pack) if req.pack else fit.from_builtin(T.TOOLS, T.WRITE_TOOLS)
+    import packs
+    return fit.normalize(req.pack) if req.pack else packs.active_tools()
+
+
+class ImportPackReq(BaseModel):
+    name: str
+    config: dict
+
+
+class ActivePackReq(BaseModel):
+    id: str
+
+
+@app.get("/api/packs")
+def packs_list():
+    import packs
+    return {"packs": packs.list_packs(), "active_name": packs.active_name(),
+            "active_id": packs.get_active_id()}
+
+
+@app.post("/api/packs/import")
+def packs_import(req: ImportPackReq):
+    import packs
+    try:
+        return {"id": packs.import_pack(req.name, req.config)}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)}
+
+
+@app.post("/api/packs/active")
+def packs_set_active(req: ActivePackReq):
+    import packs
+    packs.set_active(req.id)
+    return {"active": req.id, "name": packs.active_name()}
+
+
+class PackEnvReq(BaseModel):
+    id: str
+    base_url: str = ""
+    token: str = ""
+
+
+@app.post("/api/packs/env")
+def packs_env(req: PackEnvReq):
+    import packs
+    packs.set_env(req.id, req.base_url, req.token)
+    return {"ok": True}
+
+
+@app.delete("/api/packs/{pid}")
+def packs_delete(pid: str):
+    import packs
+    packs.delete_pack(pid)
+    return {"ok": True}
+
+
+@app.get("/packs")
+def packs_page():
+    return FileResponse(os.path.join(STATIC, "packs.html"))
+
+
+class LintReq(BaseModel):
+    config: dict | None = None
+    pack_id: str | None = None
+
+
+def _lint_config(req):
+    import packs
+    config = req.config
+    if config is None and req.pack_id:
+        config = (packs.get_pack(req.pack_id) or {}).get("config")
+    return config
+
+
+@app.post("/api/lint")
+def api_lint(req: LintReq):
+    import lint
+    config = _lint_config(req)
+    if config is None:
+        return {"error": "no config to lint (pass config or a pack_id with a stored config)"}
+    return lint.lint(config)
+
+
+class LintFixReq(BaseModel):
+    config: dict | None = None
+    pack_id: str | None = None
+    drop_tests: bool = False
+    enrich: bool = False       # AI-draft richer descriptions for thin tools
+
+
+@app.post("/api/lint/fix")
+def api_lint_fix(req: LintFixReq):
+    import lint
+    config = _lint_config(req)
+    if config is None:
+        return {"error": "no config to fix"}
+    before = lint.lint(config)["score"]
+    result = lint.autofix(config, drop_tests=req.drop_tests)
+    if req.enrich:
+        try:
+            import enrich
+            drafts = enrich.descriptions(result["config"], only_thin=True)
+            for t in result["config"]["tools"]:
+                if drafts.get(t.get("name")):
+                    t["description"] = drafts[t["name"]]
+                    result["applied"].append({"tool": t["name"], "change": "description enriched (AI draft)"})
+            rep = lint.lint(result["config"])
+            result["new_score"] = rep["score"]
+            result["remaining"] = [f for f in rep["findings"] if f["rule"] in
+                                   ("multi-host-one-server", "unresolved-base-url",
+                                    "thin-description", "missing-result-projection")]
+        except Exception as e:  # noqa: BLE001
+            result["enrich_error"] = str(e)[:160]
+    result["before_score"] = before
+    return result
 
 
 @app.post("/api/tune/analyze")
@@ -324,7 +447,7 @@ def chat(req: ChatReq):
     key = req.option.lower()
     if key not in OPTIONS:
         return {"error": f"unknown option '{key}'"}
-    mod = _mod(key)
+    mod = _runner(key)
     core.set_model(req.model)
     res = mod.run(Task(id="chat", level="chat", prompt=req.message))
     return _payload(req, res, mod, key)
@@ -336,7 +459,7 @@ def chat_stream(req: ChatReq):
     key = req.option.lower()
     if key not in OPTIONS:
         return {"error": f"unknown option '{key}'"}
-    mod = _mod(key)
+    mod = _runner(key)
     q: queue.Queue = queue.Queue()
     DONE = object()
     holder: dict = {}

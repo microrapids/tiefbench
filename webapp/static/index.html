@@ -231,10 +231,6 @@
   <label class="toggle">model <select id="modelSel"></select></label>
   <label class="toggle"><input type="checkbox" id="grade"> grade accuracy</label>
   <label class="toggle"><input type="checkbox" id="raw"> show raw</label>
-  <a class="btn ghost" href="/advisor" style="text-decoration:none">🧭 Fit Advisor</a>
-  <a class="btn ghost" href="/tune" style="text-decoration:none">🔧 Tune MCP</a>
-  <a class="btn ghost" href="/eval" style="text-decoration:none">🧪 Model Eval</a>
-  <a class="btn ghost" href="/validate" style="text-decoration:none">🔬 Validate</a>
   <button class="btn ghost" id="historyBtn">🕘 History</button>
   <button class="btn ghost" id="pinBtn">📌 Pinned (0)</button>
   <button class="btn ghost" id="compareBtn">⚖️ Compare all 5</button>
@@ -893,5 +889,6 @@ $('#pinBtn').onclick=pinnedCompare;
   loadFit();
 })();
 </script>
+<script src="/static/nav.js"></script>
 </body>
 </html>

@@ -60,11 +60,8 @@
 <header>
   <div class="brand"><span class="dot"></span> TiefBench <small>· Tune my MCP</small></div>
   <div class="spacer"></div>
-  <button class="srcbtn active" id="srcBuiltin">TiefStocks pack</button>
-  <label class="srcbtn" for="packFile">Upload MCP / TiefWise pack</label>
-  <input type="file" id="packFile" accept=".json">
-  <a class="lnk" href="/advisor">🧭 Advisor</a>
-  <a class="lnk" href="/">← Bake-off</a>
+  <label class="srcbtn" style="cursor:default">Pack <select id="packSel" style="background:var(--panel);color:var(--txt);border:none;font:inherit"></select></label>
+  <a class="srcbtn" href="/packs" style="text-decoration:none">＋ manage</a>
 </header>
 
 <main>
@@ -113,9 +110,12 @@ let pack=null, lastTools=[], lastScen=[];
 
 const SAMPLES=["Show me what I own","Is AMD a buy right now?","What changed in my portfolio today?","Give me the bear case on AMD"];
 $('#sampleBtn').onclick=()=>{ $('#scen').value=SAMPLES.join("\n"); };
-$('#srcBuiltin').onclick=()=>{ pack=null; $('#srcBuiltin').classList.add('active'); };
-$('#packFile').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f)return;
-  try{ pack=JSON.parse(await f.text()); $('#srcBuiltin').classList.remove('active'); }catch(err){ alert('Bad JSON: '+err); } });
+async function loadPacks(){
+  const d=await (await fetch('/api/packs')).json();
+  $('#packSel').innerHTML=(d.packs||[]).map(p=>`<option value="${p.id}" ${p.active?'selected':''}>${p.name} (${p.tools})</option>`).join('');
+  $('#packSel').onchange=e=>{ fetch('/api/packs/active',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:e.target.value})}); pack=null; };
+}
+loadPacks();
 
 function scenarios(){ return $('#scen').value.split("\n").map(s=>s.trim()).filter(Boolean).map(t=>({text:t})); }
 function issuesHtml(iss){ return iss.length? iss.map(i=>`<span class="iss ${i}">${i.replace('_',' ')}</span>`).join('') : '<span class="ok-pill">✓ clean</span>'; }
@@ -293,5 +293,6 @@ async function rRetest(){
 }
 $('#rAnalyzeBtn').onclick=rAnalyze;
 </script>
+<script src="/static/nav.js"></script>
 </body>
 </html>

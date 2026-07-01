@@ -57,10 +57,8 @@
 <header>
   <div class="brand"><span class="dot"></span> TiefBench <small>· Fit Advisor</small></div>
   <div class="spacer"></div>
-  <button class="srcbtn active" id="srcBuiltin">TiefStocks pack</button>
-  <label class="srcbtn" for="packFile">Upload TiefWise pack</label>
-  <input type="file" id="packFile" accept=".json">
-  <a class="back" href="/">← Bake-off</a>
+  <label class="srcbtn" style="cursor:default">Pack <select id="packSel" style="background:var(--panel);color:var(--txt);border:none;font:inherit"></select></label>
+  <a class="srcbtn" href="/packs" style="text-decoration:none">＋ manage</a>
 </header>
 
 <main>
@@ -151,14 +149,13 @@ $('#sim').addEventListener('input',e=>{
   simN = (v===realN)?null:v;
   clearTimeout(t); t=setTimeout(load,150);
 });
-$('#srcBuiltin').onclick=()=>{ pack=null; simN=null; $('#srcBuiltin').classList.add('active'); load(); };
-$('#packFile').addEventListener('change',async e=>{
-  const f=e.target.files[0]; if(!f) return;
-  try{ pack=JSON.parse(await f.text()); simN=null; $('#srcBuiltin').classList.remove('active'); load(); }
-  catch(err){ alert('Not valid JSON: '+err); }
-});
-
-load();
+async function loadPacks(){
+  const d=await (await fetch('/api/packs')).json();
+  $('#packSel').innerHTML=(d.packs||[]).map(p=>`<option value="${p.id}" ${p.active?'selected':''}>${p.name} (${p.tools})</option>`).join('');
+  $('#packSel').onchange=async e=>{ await fetch('/api/packs/active',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:e.target.value})}); pack=null; simN=null; load(); };
+}
+loadPacks(); load();
 </script>
+<script src="/static/nav.js"></script>
 </body>
 </html>

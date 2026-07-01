@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TiefBench · Packs</title>
+<style>
+  :root{--bg:#0b0e14;--bg2:#0f131c;--panel:#141925;--line:#242c3d;--txt:#e8ebf2;--mut:#8a93a8;
+        --accent:#7aa2ff;--accent2:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;--shadow:0 8px 30px rgba(0,0,0,.35)}
+  *{box-sizing:border-box} body{margin:0;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#16203a 0%,var(--bg) 55%);color:var(--txt);min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);
+    background:rgba(10,13,20,.6);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 12px var(--accent)}
+  .brand small{color:var(--mut);font-weight:500} header .spacer{flex:1}
+  a.lnk{font-size:13px;color:var(--txt);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 13px;text-decoration:none}
+  a.lnk:hover{border-color:var(--accent)}
+  main{max-width:900px;margin:0 auto;padding:22px}
+  .intro{color:var(--mut);font-size:13px;max-width:720px}
+  h3.sec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:20px 2px 10px}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0f1c;border:none;font-weight:700;padding:10px 16px;border-radius:10px;cursor:pointer}
+  .btn.ghost{background:var(--panel);color:var(--txt);border:1px solid var(--line);font-weight:600}
+  .imp{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  input[type=text]{background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:9px 11px;font:inherit;min-width:200px}
+  input[type=file]{display:none}
+  .lib{display:flex;flex-direction:column;gap:10px}
+  .pk{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .pk.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .pk .nm{font-weight:700} .pk .meta{color:var(--mut);font-size:12px}
+  .pk .badge{font-size:10px;font-weight:800;background:#13251c;color:var(--green);border:1px solid #1e5a44;border-radius:6px;padding:2px 7px}
+  .pk .sample{font-size:10px;color:var(--mut);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+  .pk{align-items:flex-start}
+  .env{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center}
+  .env input{background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:7px 9px;font:inherit}
+  .env input[id^="url_"]{min-width:300px}
+  .env button{font-size:12px;border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--accent);background:var(--bg);color:var(--accent)}
+  .lintbox{margin-top:10px}
+  .lintscore{font-weight:800;font-size:14px} .lintstr{font-size:12px;color:var(--green);margin:4px 0}
+  .lintfind{margin-top:6px;display:flex;flex-direction:column;gap:4px}
+  .lf{font-size:12px;color:var(--mut);display:flex;gap:7px;align-items:baseline}
+  .lf .dot{width:7px;height:7px;border-radius:50%;flex:none;margin-top:5px}
+  .lf.error .dot{background:var(--red)} .lf.warn .dot{background:var(--amber)} .lf.info .dot{background:#5b6b8c}
+  .lf b{color:var(--txt)} .lf code{color:var(--accent);font-size:11px} .lf .fix{color:var(--accent2)}
+  .pk .spacer{flex:1}
+  .pk button{font-size:12px;border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--line);background:var(--bg);color:var(--txt)}
+  .pk button.use{border-color:var(--accent);color:var(--accent)}
+  .pk button.del{color:var(--red);border-color:#5a2424}
+  .empty{color:var(--mut);text-align:center;padding:20px}
+  .msg{font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> TiefBench <small>· Packs</small></div>
+  <div class="spacer"></div>
+</header>
+
+<main>
+  <p class="intro">A <b>pack</b> is a tool set (collection) you want to test — imported from a <b>TiefWise MCP config</b>.
+  Pick the <b>active</b> pack; the Fit Advisor, Tune (descriptions), and Model Eval all run against it. Workflow: curate a collection in TiefWise → export MCP config → import here → test before handing to customers.</p>
+
+  <h3 class="sec">Import a TiefWise MCP config</h3>
+  <div class="imp">
+    <input type="text" id="pname" placeholder="Pack name (e.g. Billing v2)">
+    <label class="btn ghost" for="pfile">Choose config .json</label>
+    <input type="file" id="pfile" accept=".json">
+    <span id="fname" style="color:var(--mut);font-size:12px"></span>
+    <button class="btn" id="importBtn">Import &amp; activate ▸</button>
+  </div>
+  <div class="msg" id="msg"></div>
+
+  <h3 class="sec">Your packs</h3>
+  <div class="lib" id="lib"></div>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+let pending=null;
+$('#pfile').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f)return;
+  $('#fname').textContent=f.name;
+  try{ pending=JSON.parse(await f.text()); }catch(err){ pending=null; $('#msg').innerHTML='<span style="color:var(--red)">Not valid JSON</span>'; } });
+
+async function load(){
+  const d=await (await fetch('/api/packs')).json();
+  $('#lib').innerHTML=(d.packs||[]).map(p=>`<div class="pk ${p.active?'active':''}">
+    <div style="flex:1">
+      <div class="nm">${p.name} ${p.active?'<span class="badge">ACTIVE</span>':''} ${p.builtin?'<span class="sample">sample</span>':''}</div>
+      <div class="meta">${p.tools} tools · ${p.writes} write/destructive${p.builtin?'':` · base URL: ${p.base_url?`<span style="color:var(--green)">${p.base_url}</span>`:`<span style="color:var(--amber)">not set — chat can select tools but not execute</span>`}`}</div>
+      ${p.builtin?'':`<div class="env">
+        <input id="url_${p.id}" placeholder="Base URL — e.g. https://jsonplaceholder.typicode.com" value="${p.base_url||''}">
+        <input id="tok_${p.id}" type="password" placeholder="token (optional)">
+        <button onclick="saveEnv('${p.id}')">Save</button><span id="envmsg_${p.id}" style="color:var(--green);font-size:12px;margin-left:6px"></span></div>`}
+      ${p.builtin?'':`<div id="lint_${p.id}" class="lintbox"></div>`}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${p.builtin?'':`<button onclick="lintPack('${p.id}')">🔍 Lint</button>`}
+      ${p.active?'':`<button class="use" onclick="setActive('${p.id}')">Set active</button>`}
+      ${p.builtin?'':`<button class="del" onclick="del('${p.id}')">Delete</button>`}
+    </div>
+  </div>`).join('');
+}
+async function lintPack(id){
+  const box=document.getElementById('lint_'+id); box.innerHTML='<span style="color:var(--mut)">linting…</span>';
+  const r=await (await fetch('/api/lint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack_id:id})})).json();
+  if(r.error){ box.innerHTML='<span style="color:var(--red)">'+r.error+'</span>'; return; }
+  const col=r.score>=80?'var(--green)':r.score>=50?'var(--amber)':'var(--red)';
+  box.innerHTML=`<div class="lintscore" style="color:${col}">Config lint: ${r.score}/100 · <span style="color:var(--red)">${r.counts.error} errors</span> · <span style="color:var(--amber)">${r.counts.warn} warnings</span> · ${r.counts.info} info</div>
+    ${r.strengths.length?`<div class="lintstr">✅ ${r.strengths.join(' · ')}</div>`:''}
+    <div class="lintfind">${r.findings.map(f=>`<div class="lf ${f.severity}"><span class="dot"></span><b>${f.tool}</b> <code>${f.rule}</code> — ${f.message} <span class="fix">→ ${f.fix}</span></div>`).join('')}</div>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button onclick="autofix('${id}')">⚙️ Auto-fix &amp; export</button>
+      <label style="font-size:12px;color:var(--mut)"><input type="checkbox" id="drop_${id}"> drop test endpoints</label>
+      <label style="font-size:12px;color:var(--mut)"><input type="checkbox" id="enr_${id}"> ✨ AI-enrich descriptions</label>
+      <span id="fixmsg_${id}" style="font-size:12px;color:var(--green)"></span>
+    </div>`;
+}
+async function autofix(id){
+  const drop=document.getElementById('drop_'+id).checked;
+  const enr=document.getElementById('enr_'+id).checked;
+  const msg=document.getElementById('fixmsg_'+id); msg.textContent=enr?'fixing + enriching descriptions…':'fixing…';
+  const r=await (await fetch('/api/lint/fix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pack_id:id,drop_tests:drop,enrich:enr})})).json();
+  if(r.error){ msg.textContent=r.error; return; }
+  // download the fixed config
+  const blob=new Blob([JSON.stringify(r.config,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fixed-mcp-config.json'; a.click();
+  const rem=(r.remaining||[]).map(f=>f.rule);
+  const remNote = rem.length?`<br><span style="color:var(--amber)">still needs attention: ${[...new Set(rem)].join(', ')} — the multi-host / server-URL fix must be done in TiefWise (it knows the real hosts).</span>`:'';
+  msg.innerHTML=`✓ score ${r.before_score}→${r.new_score}, ${r.applied.length} fixes applied, exported.`
+    +`<div style="color:var(--mut);font-size:12px;margin-top:4px">${r.applied.map(a=>`${a.tool}: ${a.change}`).join('<br>')}${remNote}</div>`;
+}
+async function saveEnv(id){
+  const url=document.getElementById('url_'+id).value, tok=document.getElementById('tok_'+id).value;
+  await fetch('/api/packs/env',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,base_url:url,token:tok})});
+  const m=document.getElementById('envmsg_'+id); if(m){ m.textContent='saved ✓'; setTimeout(()=>load(),600); }
+}
+async function importPack(){
+  const name=$('#pname').value.trim(); if(!name){ alert('Name your pack'); return; }
+  if(!pending){ alert('Choose a valid MCP config .json'); return; }
+  $('#importBtn').disabled=true;
+  const r=await (await fetch('/api/packs/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,config:pending})})).json();
+  $('#importBtn').disabled=false;
+  if(r.error){ $('#msg').innerHTML=`<span style="color:var(--red)">${r.error}</span>`; return; }
+  $('#msg').innerHTML='<span style="color:var(--green)">Imported &amp; set active ✓</span>';
+  $('#pname').value=''; $('#fname').textContent=''; pending=null; load();
+}
+async function setActive(id){ await fetch('/api/packs/active',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})}); load(); }
+async function del(id){ if(!confirm('Delete this pack?'))return; await fetch('/api/packs/'+id,{method:'DELETE'}); load(); }
+$('#importBtn').onclick=importPack;
+load();
+</script>
+<script src="/static/nav.js"></script>
+</body>
+</html>
