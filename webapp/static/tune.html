@@ -213,8 +213,9 @@ function applyToPack(p,edits){ const c=JSON.parse(JSON.stringify(p)); (c.tools||
 $('#analyzeBtn').onclick=analyze;
 
 // ---------- Tune v2: result-projection tuning ----------
-$('#tabDesc').onclick=()=>{ $('#tabDesc').classList.add('active'); $('#tabRes').classList.remove('active'); $('#descMode').style.display=''; $('#resMode').style.display='none'; };
-$('#tabRes').onclick=()=>{ $('#tabRes').classList.add('active'); $('#tabDesc').classList.remove('active'); $('#resMode').style.display=''; $('#descMode').style.display='none'; };
+$('#tabDesc').onclick=()=>{ $('#tabDesc').classList.add('active'); $('#tabRes').classList.remove('active'); $('#descMode').style.display=''; $('#resMode').style.display='none'; location.hash=''; };
+$('#tabRes').onclick=()=>{ $('#tabRes').classList.add('active'); $('#tabDesc').classList.remove('active'); $('#resMode').style.display=''; $('#descMode').style.display='none'; location.hash='results'; };
+if(location.hash.replace('#','')==='results'){ $('#tabRes').click(); }
 $('#rSampleBtn').onclick=()=>{ $('#rscen').value="Give me a full read on AMD: the analysis, my thesis, and the bear case."; };
 
 let rBaseline=null;
@@ -248,8 +249,22 @@ function renderRSug(sugs){
      <div class="rat">why safe: ${s.rationale||''}</div>
      <label><input type="checkbox" class="rapprove" data-tool="${s.tool}" data-edit="rk${i}" checked> Apply this projection</label>
    </div>`).join('')+
-   `<div style="margin-top:8px"><button class="btn" id="rRetestBtn">Re-test with projections ▸</button></div>`;
+   `<div style="margin-top:8px"><button class="btn" id="rRetestBtn">Re-test with projections ▸</button>
+     <button class="btn ghost" id="rExportBtn">⬇ Export projection config</button></div>`;
   $('#rRetestBtn').onclick=rRetest;
+  $('#rExportBtn').onclick=exportProjection;
+}
+function exportProjection(){
+  const proj=rProjections();
+  if(!Object.keys(proj).length){ alert('Approve at least one projection'); return; }
+  const out={
+    tiefbench_projection:"1.0",
+    note:"Apply at your MCP proxy/gateway or tool layer: for each tool, keep ONLY these result field paths (dotted for nested) before returning to the agent. Shrinks what re-enters context each loop turn.",
+    scenario_validated:$('#rscen').value.trim(),
+    projections:proj
+  };
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tiefbench-projection.json'; a.click();
 }
 function rProjections(){
   const p={};
