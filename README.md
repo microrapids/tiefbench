@@ -1,11 +1,16 @@
 # TiefBench
 
-**Benchmark and observe how AI agents reach your APIs.** TiefBench runs the same
-request through five agent strategies — direct function calling, MCP, OpenAPI/
-mrapids collections, planner orchestration, and dynamic Python — against a live
-API, and shows you which approach is most accurate, cheapest, and safest. It also
-**advises** which strategy fits your tool pack and **tunes your MCP tool
-descriptions** from real scenarios.
+**Benchmark, observe, and optimize how AI agents reach your APIs.** TiefBench runs
+the same request through five agent strategies — direct function calling, MCP,
+OpenAPI/mrapids collections, planner orchestration, and dynamic Python — against a
+live API, and shows which approach is most accurate, cheapest, and safest. It goes
+past benchmarking to the two under-served, high-value levers of the agent loop:
+
+- **Tune your MCP tool contract** — both *descriptions* (which tool the agent picks)
+  and *results* (what tools return, which drives multi-step loop cost), with
+  before/after proof.
+- **De-risk model choice** — compare models side-by-side ("tested on Sonnet, prod
+  runs Haiku?") and validate that the cheap selection probe predicts the real agent.
 
 ```
 User NL prompt
@@ -29,11 +34,13 @@ cd tiefbench
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...          # must have credit balance
 
-# Web app — three screens:
+# Web app — five screens:
 .venv/bin/python -m uvicorn webapp.server:app --port 8800
-#   http://127.0.0.1:8800          Bake-off chat (compare all 5, monitor each query)
-#   http://127.0.0.1:8800/advisor  Fit Advisor (which option suits your pack)
-#   http://127.0.0.1:8800/tune     Tune my MCP (improve tool descriptions from scenarios)
+#   http://127.0.0.1:8800           Bake-off chat (compare all 5, per-query monitor, model picker)
+#   http://127.0.0.1:8800/advisor   Fit Advisor (which option suits your tool pack)
+#   http://127.0.0.1:8800/tune      Tune my MCP (descriptions + result projections, with A/B proof)
+#   http://127.0.0.1:8800/eval      Model Eval (compare models; "tested on X, prod on Y?")
+#   http://127.0.0.1:8800/validate  Probe validation (does the probe predict the real agent?)
 ```
 
 **CLI bake-off** (scored scorecard + per-option aggregates, persisted to a cache DB):
@@ -49,10 +56,20 @@ export ANTHROPIC_API_KEY=sk-ant-...          # must have credit balance
 `TIEFSTOCKS_URL` (default `http://127.0.0.1:8001`),
 `TIEFBENCH_JUDGE_MODEL` / `TIEFBENCH_INTENT_MODEL` (default Haiku).
 
-> The **Fit Advisor** and **Tune my MCP** screens work without the live API or
-> `mrapids` (Tune uses a selection probe; the Advisor is static + calibrated from
-> past runs). The **chat bake-off** needs the API key, and the live API for
-> options that actually call it.
+> The **Fit Advisor**, **Model Eval**, and Tune's *descriptions* mode work without
+> the live API (they use the cheap selection probe / static signals). The **chat
+> bake-off**, **Validate**, and Tune's *results* mode run the real loop, so they
+> need the API key and the live API.
+
+## Web screens
+
+| Screen | What it's for |
+| ------ | ------------- |
+| **Bake-off** (`/`) | Run any option on a prompt; live streaming, per-query monitor (intent → loop turns → API calls + reasons), zoomable workflow diagram, model picker, ⚖️ Compare all 5, 📌 pin/compare, 🕘 History, ＋ New chat. |
+| **Fit Advisor** (`/advisor`) | Analyze a tool pack → per-option fit (🟢/🟡/🔴) with reasons, predicted cost, a what-if tool-count slider, and calibration from real runs. Also drives the inline fit nudge + sidebar dots in the chat. |
+| **Tune my MCP** (`/tune`) | **🏷️ Descriptions** — fix ambiguous/low-confidence tool selection with AI-drafted "use-when / not-when" descriptions + A/B re-test. **✂️ Results** — AI-draft a per-tool field projection (config transform, no API change) and prove the multi-step loop-token cut with answer correctness held. |
+| **Model Eval** (`/eval`) | Run the same scenarios across models, diff each vs a reference, flag divergences, recommend the cheapest model that still matches. N-sampling + agreement confidence intervals. Optional transient BYOK key (blank = env key). |
+| **Validate** (`/validate`) | Does the cheap selection probe predict the *real* multi-turn agent? Tagged scenarios, full-trace matching (first-tool + any-use), per-model, confidence intervals. |
 
 ## Design docs
 
@@ -197,6 +214,9 @@ Demo features:
   API/LLM/tokens/cost/latency/accuracy side by side.
 - **🕘 History** — recent persisted runs from the cache DB (web + CLI), each with
   its captured intent and expandable per-call reasons (`GET /api/history`).
+- **Model picker** — switch the model per request from the header; cost is priced
+  by the model actually used. **＋ New chat** clears the transcript (History and
+  Pinned runs are kept).
 - **Zoomable workflow** — scroll to zoom, drag to pan, `⤢` for fullscreen; the
   live node/edge highlight plays on the zoomed diagram.
 - **MCP loop showcase** — on Option C, a `tools/list` **registration banner**
